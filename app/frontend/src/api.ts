@@ -1,0 +1,112 @@
+/**
+ * API client for the Sitzungsprotokoll Generator backend
+ */
+
+import type { TranscriptLine, TranscriptionJob } from "./types";
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8010";
+
+/**
+ * Start a transcription job by uploading an audio file.
+ */
+export async function startTranscription(
+  audioFile: File
+): Promise<TranscriptionJob> {
+  const formData = new FormData();
+  formData.append("audio", audioFile);
+
+  const response = await fetch(`${API_BASE}/api/transcribe`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Fehler beim Starten der Transkription");
+  }
+
+  return response.json();
+}
+
+/**
+ * Get the status of a transcription job.
+ */
+export async function getTranscriptionStatus(
+  jobId: string
+): Promise<TranscriptionJob> {
+  const response = await fetch(`${API_BASE}/api/transcribe/${jobId}`);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Fehler beim Abrufen des Status");
+  }
+
+  return response.json();
+}
+
+/**
+ * Poll for transcription completion.
+ */
+export async function pollTranscription(
+  jobId: string,
+  onProgress?: (progress: number, message: string) => void
+): Promise<TranscriptLine[]> {
+  while (true) {
+    const status = await getTranscriptionStatus(jobId);
+
+    if (onProgress) {
+      onProgress(status.progress, status.message);
+    }
+
+    if (status.status === "completed") {
+      return status.transcript ?? [];
+    }
+
+    if (status.status === "failed") {
+      throw new Error(status.error || "Transkription fehlgeschlagen");
+    }
+
+    // Wait before polling again
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+}
+
+/**
+ * Generate a summary for a TOP segment.
+ */
+export async function generateSummary(
+  topTitle: string,
+  lines: TranscriptLine[]
+): Promise<string> {
+  const response = await fetch(`${API_BASE}/api/summarize`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      top_title: topTitle,
+      lines: lines,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Fehler bei der Zusammenfassung");
+  }
+
+  const data = await response.json();
+  return data.summary;
+}
+
+/**
+ * Check if the backend is available.
+ */
+export async function checkBackendHealth(): Promise<boolean> {
+  try {
+    console.log("Checking backend health at", API_BASE);
+    const response = await fetch(`${API_BASE}/`);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
