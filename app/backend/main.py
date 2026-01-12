@@ -4,7 +4,9 @@ FastAPI Backend for Meeting Minutes Generator
 
 import os
 import uuid
+import time
 import logging
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional
@@ -72,12 +74,46 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Job cleanup configuration
+JOB_MAX_AGE_SECONDS = int(os.environ.get("JOB_MAX_AGE_SECONDS", "7200"))  # 2 hours
+JOB_MAX_COUNT = int(os.environ.get("JOB_MAX_COUNT", "100"))
+
 # In-memory storage for jobs (in production, use Redis or database)
-jobs: dict = {}
+jobs: OrderedDict = OrderedDict()
 
 # Temporary upload directory
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+
+def cleanup_old_jobs() -> int:
+    """
+    Remove old or excess jobs from memory.
+    Returns number of jobs removed.
+    """
+    now = time.time()
+    removed = 0
+
+    # Remove jobs older than MAX_AGE
+    jobs_to_remove = []
+    for job_id, job_data in jobs.items():
+        if now - job_data.get("created_at", now) > JOB_MAX_AGE_SECONDS:
+            jobs_to_remove.append(job_id)
+
+    for job_id in jobs_to_remove:
+        del jobs[job_id]
+        removed += 1
+
+    # Remove oldest jobs if count exceeds MAX_COUNT
+    while len(jobs) > JOB_MAX_COUNT:
+        oldest_job_id = next(iter(jobs))
+        del jobs[oldest_job_id]
+        removed += 1
+
+    if removed > 0:
+        logger.info(f"Cleaned up {removed} old jobs, {len(jobs)} remaining")
+
+    return removed
 
 
 # ----- Pydantic Models -----
@@ -172,8 +208,9 @@ async def start_transcription(
         f.write(content)
     logger.info(f"Saved file: {file_path} ({len(content)} bytes)")
 
-    # Initialize job
+    # Initialize job with timestamp
     jobs[job_id] = {
+        "created_at": time.time(),
         "status": "pending",
         "progress": 0,
         "message": "Audio hochgeladen",
@@ -181,6 +218,9 @@ async def start_transcription(
         "transcript": None,
         "error": None,
     }
+
+    # Cleanup old jobs to prevent memory buildup
+    cleanup_old_jobs()
 
     # Start background transcription with pre-loaded models
     logger.info(f"Starting background transcription task for job: {job_id}")

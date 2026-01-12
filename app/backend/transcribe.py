@@ -14,6 +14,7 @@ Configuration via environment variables:
 """
 
 import os
+import gc
 
 # PyTorch 2.6+ changed torch.load() to use weights_only=True by default for security.
 # WhisperX uses pyannote-audio 3.x which stores OmegaConf configs in checkpoints.
@@ -25,6 +26,8 @@ import re
 import logging
 from dataclasses import dataclass
 from typing import List, Dict, Callable, Optional, Any
+
+import torch
 from whisperx.diarize import DiarizationPipeline
 
 # Configure logging with timestamps
@@ -131,6 +134,13 @@ def load_models() -> TranscriptionModels:
     )
 
 
+def _cleanup_memory(device: str) -> None:
+    """Force memory cleanup after transcription."""
+    gc.collect()
+    if device == "cuda" and torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
 def transcribe_audio(
     file_path: str,
     models: TranscriptionModels,
@@ -151,74 +161,89 @@ def transcribe_audio(
 
     logger.info(f"Starting transcription for: {file_path}")
 
-    if progress_callback:
-        progress_callback(5, "Lade Audio...")
+    # Initialize variables for cleanup tracking
+    audio = None
+    result = None
+    diarize_segments = None
 
-    # Load audio
-    logger.info(f"Loading audio file: {file_path}")
-    audio = whisperx.load_audio(file_path)
-    logger.info(f"Audio loaded, duration: {len(audio)/16000:.1f} seconds")
+    try:
+        if progress_callback:
+            progress_callback(5, "Lade Audio...")
 
-    if progress_callback:
-        progress_callback(15, "Transkription läuft...")
+        # Load audio
+        logger.info(f"Loading audio file: {file_path}")
+        audio = whisperx.load_audio(file_path)
+        logger.info(f"Audio loaded, duration: {len(audio)/16000:.1f} seconds")
 
-    # Transcribe using pre-loaded model
-    logger.info(f"Starting transcription with batch_size={WHISPER_BATCH_SIZE}...")
-    result = models.whisper_model.transcribe(
-        audio,
-        batch_size=WHISPER_BATCH_SIZE,
-        language=WHISPER_LANGUAGE,
-    )
-    logger.info(f"Transcription complete, found {len(result.get('segments', []))} segments")
+        if progress_callback:
+            progress_callback(15, "Transkription läuft...")
 
-    if progress_callback:
-        progress_callback(45, "Alignment läuft...")
+        # Transcribe using pre-loaded model
+        logger.info(f"Starting transcription with batch_size={WHISPER_BATCH_SIZE}...")
+        result = models.whisper_model.transcribe(
+            audio,
+            batch_size=WHISPER_BATCH_SIZE,
+            language=WHISPER_LANGUAGE,
+        )
+        logger.info(f"Transcription complete, found {len(result.get('segments', []))} segments")
 
-    # Align using pre-loaded model
-    logger.info("Running alignment...")
-    result = whisperx.align(
-        result["segments"],
-        models.align_model,
-        models.align_metadata,
-        audio,
-        models.device,
-        return_char_alignments=False,
-    )
-    logger.info("Alignment complete")
+        if progress_callback:
+            progress_callback(45, "Alignment läuft...")
 
-    if progress_callback:
-        progress_callback(65, "Sprechererkennung läuft...")
+        # Align using pre-loaded model
+        logger.info("Running alignment...")
+        result = whisperx.align(
+            result["segments"],
+            models.align_model,
+            models.align_metadata,
+            audio,
+            models.device,
+            return_char_alignments=False,
+        )
+        logger.info("Alignment complete")
 
-    # Speaker diarization using pre-loaded pipeline
-    logger.info("Running speaker diarization...")
-    diarize_segments = models.diarize_pipeline(audio)
-    logger.info("Diarization complete")
+        if progress_callback:
+            progress_callback(65, "Sprechererkennung läuft...")
 
-    if progress_callback:
-        progress_callback(85, "Segmente werden zusammengeführt...")
+        # Speaker diarization using pre-loaded pipeline
+        logger.info("Running speaker diarization...")
+        diarize_segments = models.diarize_pipeline(audio)
+        logger.info("Diarization complete")
 
-    # Assign speakers to segments
-    logger.info("Assigning speakers to segments...")
-    result = whisperx.assign_word_speakers(diarize_segments, result)
-    logger.info("Speaker assignment complete")
+        if progress_callback:
+            progress_callback(85, "Segmente werden zusammengeführt...")
 
-    if progress_callback:
-        progress_callback(95, "Transkript wird erstellt...")
+        # Assign speakers to segments
+        logger.info("Assigning speakers to segments...")
+        result = whisperx.assign_word_speakers(diarize_segments, result)
+        logger.info("Speaker assignment complete")
 
-    # Convert to our format
-    logger.info("Creating transcript output...")
-    transcript = []
-    for segment in result["segments"]:
-        speaker = segment.get("speaker", "UNKNOWN")
-        text = segment.get("text", "").strip()
-        if text:
-            transcript.append({
-                "speaker": speaker,
-                "text": text,
-            })
+        if progress_callback:
+            progress_callback(95, "Transkript wird erstellt...")
 
-    logger.info(f"Transcription finished: {len(transcript)} lines")
-    return transcript
+        # Convert to our format
+        logger.info("Creating transcript output...")
+        transcript = []
+        for segment in result["segments"]:
+            speaker = segment.get("speaker", "UNKNOWN")
+            text = segment.get("text", "").strip()
+            if text:
+                transcript.append({
+                    "speaker": speaker,
+                    "text": text,
+                })
+
+        logger.info(f"Transcription finished: {len(transcript)} lines")
+        return transcript
+
+    finally:
+        # Explicit memory cleanup
+        logger.info("Cleaning up transcription memory...")
+        del audio
+        del result
+        del diarize_segments
+        _cleanup_memory(models.device)
+        logger.info("Memory cleanup complete")
 
 
 def parse_transcript_file(file_path: str) -> List[Dict[str, str]]:

@@ -68,7 +68,7 @@ uv sync
 export HF_TOKEN=your_huggingface_token
 
 # Run development server
-uv run uvicorn main:app --reload
+uv run uvicorn main:app --port 8010
 ```
 
 The backend runs on `http://localhost:8010`.
@@ -111,16 +111,16 @@ Services:
 
 ### Environment Variables
 
-| Variable             | Description                                         | Default                       |
-| -------------------- | --------------------------------------------------- | ----------------------------- |
-| `HF_TOKEN`           | HuggingFace access token (required for diarization) | -                             |
-| `WHISPER_MODEL`      | Whisper model size                                  | `large-v2`                    |
-| `WHISPER_DEVICE`     | Device for inference (`cuda`, `cpu`, `auto`)        | `auto`                        |
-| `WHISPER_BATCH_SIZE` | Batch size for transcription                        | `16`                          |
-| `WHISPER_LANGUAGE`   | Language code                                       | `de`                          |
-| `LLM_BASE_URL`       | Ollama API endpoint                                 | `http://localhost:11434/v1`   |
-| `LLM_MODEL`          | Model name for summarization                        | `qwen3:8b`                    |
-| `CORS_ORIGINS`       | Allowed CORS origins (comma-separated)              | `http://localhost:5173,...`   |
+| Variable             | Description                                         | Default                     |
+| -------------------- | --------------------------------------------------- | --------------------------- |
+| `HF_TOKEN`           | HuggingFace access token (required for diarization) | -                           |
+| `WHISPER_MODEL`      | Whisper model size                                  | `large-v2`                  |
+| `WHISPER_DEVICE`     | Device for inference (`cuda`, `cpu`, `auto`)        | `auto`                      |
+| `WHISPER_BATCH_SIZE` | Batch size for transcription                        | `16`                        |
+| `WHISPER_LANGUAGE`   | Language code                                       | `de`                        |
+| `LLM_BASE_URL`       | Ollama API endpoint                                 | `http://localhost:11434/v1` |
+| `LLM_MODEL`          | Model name for summarization                        | `qwen3:8b`                  |
+| `CORS_ORIGINS`       | Allowed CORS origins (comma-separated)              | `http://localhost:5173,...` |
 
 ### Frontend Environment
 
