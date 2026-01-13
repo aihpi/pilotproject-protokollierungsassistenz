@@ -44,7 +44,6 @@ export default function AssignmentStep({
     handleTimeUpdate,
     seekToLine,
     isAutoScroll,
-    setIsAutoScroll,
   } = useAudioSync(transcript);
 
   // Auto-scroll to current line during playback
@@ -74,8 +73,9 @@ export default function AssignmentStep({
 
   const handleLineClick = (lineIndex: number, event: MouseEvent<HTMLDivElement>) => {
     // Double-click to seek audio
-    if (event.detail === 2 && audioUrl) {
-      seekToLine(lineIndex, transcript[lineIndex]);
+    const line = transcript[lineIndex];
+    if (event.detail === 2 && audioUrl && line) {
+      seekToLine(lineIndex, line);
       return;
     }
 
@@ -180,23 +180,12 @@ export default function AssignmentStep({
         <div className="flex-1 bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col">
           {/* Audio Player */}
           {audioUrl && (
-            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 space-y-2">
+            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
               <AudioPlayer
                 audioUrl={audioUrl}
                 currentTime={seekTime}
                 onTimeUpdate={handleTimeUpdate}
               />
-              <div className="flex items-center justify-end text-xs text-gray-500">
-                <label className="flex items-center gap-1 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isAutoScroll}
-                    onChange={(e) => setIsAutoScroll(e.target.checked)}
-                    className="rounded"
-                  />
-                  Auto-Scroll
-                </label>
-              </div>
             </div>
           )}
 

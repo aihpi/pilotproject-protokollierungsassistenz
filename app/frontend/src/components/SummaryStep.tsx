@@ -24,6 +24,7 @@ export default function SummaryStep({
   const [selectedTop, setSelectedTop] = useState(0);
   const [editingTop, setEditingTop] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
+  const [copied, setCopied] = useState(false);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
 
   // Audio sync hook (uses full transcript for seeking)
@@ -33,7 +34,6 @@ export default function SummaryStep({
     handleTimeUpdate,
     seekToLine,
     isAutoScroll,
-    setIsAutoScroll,
   } = useAudioSync(transcript);
 
   // Auto-scroll to current line during playback (within filtered transcript)
@@ -87,6 +87,15 @@ export default function SummaryStep({
   const cancelEdit = () => {
     setEditingTop(null);
     setEditText('');
+  };
+
+  const handleCopy = async () => {
+    const text = summaries[selectedTop];
+    if (text) {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleExport = () => {
@@ -183,17 +192,39 @@ export default function SummaryStep({
                 ) : (
                   <>
                     <button
-                      onClick={() => startEditing(selectedTop)}
-                      className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 flex items-center gap-1"
+                      onClick={handleCopy}
+                      disabled={!summaries[selectedTop]}
+                      className="p-2 text-gray-600 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={copied ? 'Kopiert!' : 'In Zwischenablage kopieren'}
                     >
-                      Bearbeiten
+                      {copied ? (
+                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => startEditing(selectedTop)}
+                      className="p-2 text-gray-600 hover:bg-gray-200 rounded"
+                      title="Bearbeiten"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
                     </button>
                     <button
                       onClick={() => onRegenerateSummary(selectedTop)}
                       disabled={isGenerating}
-                      className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 flex items-center gap-1 disabled:opacity-50"
+                      className="p-2 text-blue-600 hover:bg-blue-100 rounded disabled:opacity-50"
+                      title="Neu generieren"
                     >
-                      Neu generieren
+                      <svg className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
                     </button>
                   </>
                 )}
@@ -227,23 +258,12 @@ export default function SummaryStep({
           <div className="h-64 bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col">
             {/* Audio Player */}
             {audioUrl && (
-              <div className="px-4 py-2 border-b border-gray-200 bg-gray-50 space-y-2">
+              <div className="px-4 py-2 border-b border-gray-200 bg-gray-50">
                 <AudioPlayer
                   audioUrl={audioUrl}
                   currentTime={seekTime}
                   onTimeUpdate={handleTimeUpdate}
                 />
-                <div className="flex items-center justify-end text-xs text-gray-500">
-                  <label className="flex items-center gap-1 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={isAutoScroll}
-                      onChange={(e) => setIsAutoScroll(e.target.checked)}
-                      className="rounded"
-                    />
-                    Auto-Scroll
-                  </label>
-                </div>
               </div>
             )}
 
