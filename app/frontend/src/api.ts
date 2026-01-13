@@ -46,11 +46,12 @@ export async function getTranscriptionStatus(
 
 /**
  * Poll for transcription completion.
+ * Returns the full TranscriptionJob including audio_url for playback.
  */
 export async function pollTranscription(
   jobId: string,
   onProgress?: (progress: number, message: string) => void
-): Promise<TranscriptLine[]> {
+): Promise<TranscriptionJob> {
   while (true) {
     const status = await getTranscriptionStatus(jobId);
 
@@ -59,7 +60,7 @@ export async function pollTranscription(
     }
 
     if (status.status === "completed") {
-      return status.transcript ?? [];
+      return status;
     }
 
     if (status.status === "failed") {

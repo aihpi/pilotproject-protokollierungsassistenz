@@ -6,6 +6,8 @@
 export interface TranscriptLine {
   speaker: string;
   text: string;
+  start: number;  // Start time in seconds
+  end: number;    // End time in seconds
 }
 
 export interface TranscriptionJob {
@@ -14,6 +16,7 @@ export interface TranscriptionJob {
   progress: number;
   message: string;
   transcript?: TranscriptLine[];
+  audio_url?: string;  // URL to stream audio for playback
   error?: string;
 }
 
@@ -55,6 +58,7 @@ export interface AssignmentStepProps {
   transcript: TranscriptLine[];
   assignments: (number | null)[];
   setAssignments: (assignments: (number | null)[]) => void;
+  audioUrl?: string;  // URL to stream audio for playback
 }
 
 export interface SummaryStepProps {
@@ -66,6 +70,7 @@ export interface SummaryStepProps {
   setSummaries: (summaries: Record<number, string>) => void;
   onRegenerateSummary: (topIndex: number) => Promise<void>;
   isGenerating: boolean;
+  audioUrl?: string;  // URL to stream audio for playback
 }
 
 // Color palette type for TOPs

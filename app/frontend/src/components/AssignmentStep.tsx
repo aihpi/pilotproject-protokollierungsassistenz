@@ -1,5 +1,13 @@
-import { useState, type MouseEvent } from 'react';
+import { useState, useRef, useEffect, type MouseEvent } from 'react';
 import type { AssignmentStepProps, TopColor } from '../types';
+import AudioPlayer from './AudioPlayer';
+import { useAudioSync } from '../hooks/useAudioSync';
+
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
 
 // Color palette for TOPs
 const topColors: TopColor[] = [
@@ -20,9 +28,31 @@ export default function AssignmentStep({
   transcript,
   assignments,
   setAssignments,
+  audioUrl,
 }: AssignmentStepProps) {
   const [selectedTop, setSelectedTop] = useState(0);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
+  const transcriptContainerRef = useRef<HTMLDivElement>(null);
+
+  // Audio sync hook
+  const {
+    seekTime,
+    currentLineIndex,
+    handleTimeUpdate,
+    seekToLine,
+    isAutoScroll,
+    setIsAutoScroll,
+  } = useAudioSync(transcript);
+
+  // Auto-scroll to current line during playback
+  useEffect(() => {
+    if (isAutoScroll && currentLineIndex >= 0 && transcriptContainerRef.current) {
+      const lineElement = transcriptContainerRef.current.children[currentLineIndex] as HTMLElement;
+      if (lineElement) {
+        lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [currentLineIndex, isAutoScroll]);
 
   const getColor = (topIndex: number): TopColor => topColors[topIndex % topColors.length]!;
 
@@ -37,6 +67,12 @@ export default function AssignmentStep({
   const counts = getAssignmentCounts();
 
   const handleLineClick = (lineIndex: number, event: MouseEvent<HTMLDivElement>) => {
+    // Double-click to seek audio
+    if (event.detail === 2 && audioUrl) {
+      seekToLine(lineIndex, transcript[lineIndex]);
+      return;
+    }
+
     if (event.shiftKey && selectionStart !== null) {
       // Range selection
       const start = Math.min(selectionStart, lineIndex);
@@ -71,7 +107,7 @@ export default function AssignmentStep({
         <p className="text-blue-800 text-sm">
           <strong>Anleitung:</strong> 1) TOP links auswählen → 2) Zeilen rechts
           anklicken (Shift+Klick für Bereich) → 3) Zugeordnete Zeilen werden
-          farblich markiert
+          farblich markiert{audioUrl && ' → Doppelklick auf Zeile zum Abspielen'}
         </p>
       </div>
 
@@ -126,13 +162,36 @@ export default function AssignmentStep({
 
         {/* Transcript */}
         <div className="flex-1 bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col">
+          {/* Audio Player */}
+          {audioUrl && (
+            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 space-y-2">
+              <AudioPlayer
+                audioUrl={audioUrl}
+                currentTime={seekTime}
+                onTimeUpdate={handleTimeUpdate}
+              />
+              <div className="flex items-center justify-end text-xs text-gray-500">
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isAutoScroll}
+                    onChange={(e) => setIsAutoScroll(e.target.checked)}
+                    className="rounded"
+                  />
+                  Auto-Scroll
+                </label>
+              </div>
+            </div>
+          )}
+
           <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
             <h3 className="font-medium text-gray-900">Transkript</h3>
           </div>
-          <div className="flex-1 overflow-y-auto p-2">
+          <div ref={transcriptContainerRef} className="flex-1 overflow-y-auto p-2">
             {transcript.map((line, index) => {
               const assignedTo = assignments[index] ?? null;
               const color = assignedTo !== null ? getColor(assignedTo) : null;
+              const isCurrentLine = index === currentLineIndex;
               return (
                 <div
                   key={index}
@@ -141,12 +200,15 @@ export default function AssignmentStep({
                     color
                       ? `${color.bg} ${color.border} hover:opacity-80`
                       : 'border-transparent hover:bg-gray-100'
-                  }`}
+                  } ${isCurrentLine ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}
                 >
                   <span className="font-medium text-gray-600">
                     {line.speaker}:
                   </span>{' '}
                   <span className="text-gray-800">{line.text}</span>
+                  <span className="ml-2 text-xs text-gray-400">
+                    [{formatTime(line.start)}]
+                  </span>
                 </div>
               );
             })}

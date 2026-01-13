@@ -31,6 +31,7 @@ export default function App() {
   const [assignments, setAssignments] = useState<(number | null)[]>([]);
   const [summaries, setSummaries] = useState<Record<number, string>>({});
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
   // Check backend availability on mount
   useEffect(() => {
@@ -51,7 +52,7 @@ export default function App() {
       const job = await apiStartTranscription(audioFile);
 
       // Poll for completion
-      const transcriptResult = await pollTranscription(
+      const completedJob = await pollTranscription(
         job.job_id,
         (progress, message) => {
           setProcessingProgress(progress);
@@ -59,9 +60,17 @@ export default function App() {
         }
       );
 
-      // Set transcript and move to next step
+      // Set transcript and audio URL
+      const transcriptResult = completedJob.transcript ?? [];
       setTranscript(transcriptResult);
       setAssignments(new Array(transcriptResult.length).fill(null));
+
+      // Set audio URL for playback (construct full URL)
+      if (completedJob.audio_url) {
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8010';
+        setAudioUrl(`${baseUrl}${completedJob.audio_url}`);
+      }
+
       setIsProcessing(false);
       setCurrentStep(2);
     } catch (error) {
@@ -117,6 +126,7 @@ export default function App() {
     setTranscript([]);
     setAssignments([]);
     setProcessingError(null);
+    setAudioUrl(null);
   };
 
   const handleStep3Back = () => {
@@ -199,6 +209,7 @@ export default function App() {
           transcript={transcript}
           assignments={assignments}
           setAssignments={setAssignments}
+          audioUrl={audioUrl ?? undefined}
         />
       ) : (
         <SummaryStep
@@ -210,6 +221,7 @@ export default function App() {
           setSummaries={setSummaries}
           onRegenerateSummary={handleRegenerateSummary}
           isGenerating={isGeneratingSummary}
+          audioUrl={audioUrl ?? undefined}
         />
       )}
     </Layout>

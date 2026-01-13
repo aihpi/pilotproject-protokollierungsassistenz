@@ -1,5 +1,13 @@
-import { useState, type ChangeEvent } from 'react';
-import type { SummaryStepProps } from '../types';
+import { useState, useRef, useEffect, type ChangeEvent } from 'react';
+import type { SummaryStepProps, TranscriptLine } from '../types';
+import AudioPlayer from './AudioPlayer';
+import { useAudioSync } from '../hooks/useAudioSync';
+
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
 
 export default function SummaryStep({
   onBack,
@@ -10,13 +18,52 @@ export default function SummaryStep({
   setSummaries,
   onRegenerateSummary,
   isGenerating,
+  audioUrl,
 }: SummaryStepProps) {
   const [selectedTop, setSelectedTop] = useState(0);
   const [editingTop, setEditingTop] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
+  const transcriptContainerRef = useRef<HTMLDivElement>(null);
+
+  // Audio sync hook (uses full transcript for seeking)
+  const {
+    seekTime,
+    currentLineIndex,
+    handleTimeUpdate,
+    seekToLine,
+    isAutoScroll,
+    setIsAutoScroll,
+  } = useAudioSync(transcript);
+
+  // Auto-scroll to current line during playback (within filtered transcript)
+  useEffect(() => {
+    if (isAutoScroll && currentLineIndex >= 0 && transcriptContainerRef.current) {
+      // Find position of current line within the filtered transcript
+      const topLines = getTranscriptForTop(selectedTop);
+      const filteredIndex = topLines.findIndex((line) => {
+        const originalIndex = transcript.indexOf(line);
+        return originalIndex === currentLineIndex;
+      });
+      if (filteredIndex >= 0) {
+        const lineElement = transcriptContainerRef.current.children[filteredIndex] as HTMLElement;
+        if (lineElement) {
+          lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    }
+  }, [currentLineIndex, isAutoScroll, selectedTop]);
 
   const getTranscriptForTop = (topIndex: number) => {
     return transcript.filter((_, i) => assignments[i] === topIndex);
+  };
+
+  const handleLineDoubleClick = (line: TranscriptLine) => {
+    if (audioUrl) {
+      const originalIndex = transcript.indexOf(line);
+      if (originalIndex >= 0) {
+        seekToLine(originalIndex, line);
+      }
+    }
   };
 
   const startEditing = (topIndex: number) => {
@@ -170,22 +217,58 @@ export default function SummaryStep({
           </div>
 
           {/* Original Transcript for this TOP */}
-          <div className="h-48 bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col">
+          <div className="h-64 bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col">
+            {/* Audio Player */}
+            {audioUrl && (
+              <div className="px-4 py-2 border-b border-gray-200 bg-gray-50 space-y-2">
+                <AudioPlayer
+                  audioUrl={audioUrl}
+                  currentTime={seekTime}
+                  onTimeUpdate={handleTimeUpdate}
+                />
+                <div className="flex items-center justify-end text-xs text-gray-500">
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isAutoScroll}
+                      onChange={(e) => setIsAutoScroll(e.target.checked)}
+                      className="rounded"
+                    />
+                    Auto-Scroll
+                  </label>
+                </div>
+              </div>
+            )}
+
             <div className="px-4 py-2 border-b border-gray-200 bg-gray-50">
               <h4 className="text-sm font-medium text-gray-700">
                 Originaltranskript ({topLines.length} Zeilen)
+                {audioUrl && <span className="text-gray-400 font-normal"> - Doppelklick zum Abspielen</span>}
               </h4>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 text-sm">
+            <div ref={transcriptContainerRef} className="flex-1 overflow-y-auto p-3 text-sm">
               {topLines.length > 0 ? (
-                topLines.map((line, index) => (
-                  <div key={index} className="mb-1">
-                    <span className="font-medium text-gray-500">
-                      {line.speaker}:
-                    </span>{' '}
-                    <span className="text-gray-700">{line.text}</span>
-                  </div>
-                ))
+                topLines.map((line, index) => {
+                  const originalIndex = transcript.indexOf(line);
+                  const isCurrentLine = originalIndex === currentLineIndex;
+                  return (
+                    <div
+                      key={index}
+                      onDoubleClick={() => handleLineDoubleClick(line)}
+                      className={`mb-1 px-2 py-1 rounded cursor-pointer hover:bg-gray-100 ${
+                        isCurrentLine ? 'ring-2 ring-blue-500 ring-offset-1 bg-blue-50' : ''
+                      }`}
+                    >
+                      <span className="font-medium text-gray-500">
+                        {line.speaker}:
+                      </span>{' '}
+                      <span className="text-gray-700">{line.text}</span>
+                      <span className="ml-2 text-xs text-gray-400">
+                        [{formatTime(line.start)}]
+                      </span>
+                    </div>
+                  );
+                })
               ) : (
                 <div className="text-gray-400 text-center py-4">
                   Keine Zeilen diesem TOP zugeordnet.
