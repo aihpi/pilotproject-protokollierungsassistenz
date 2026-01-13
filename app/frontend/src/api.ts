@@ -73,11 +73,20 @@ export async function pollTranscription(
 }
 
 /**
+ * Options for summary generation.
+ */
+export interface SummarizeOptions {
+  model?: string;
+  systemPrompt?: string;
+}
+
+/**
  * Generate a summary for a TOP segment.
  */
 export async function generateSummary(
   topTitle: string,
-  lines: TranscriptLine[]
+  lines: TranscriptLine[],
+  options?: SummarizeOptions
 ): Promise<string> {
   const response = await fetch(`${API_BASE}/api/summarize`, {
     method: "POST",
@@ -87,6 +96,8 @@ export async function generateSummary(
     body: JSON.stringify({
       top_title: topTitle,
       lines: lines,
+      model: options?.model,
+      system_prompt: options?.systemPrompt,
     }),
   });
 
@@ -97,6 +108,46 @@ export async function generateSummary(
 
   const data = await response.json();
   return data.summary;
+}
+
+/**
+ * Options for TOP extraction from PDF.
+ */
+export interface ExtractTOPsOptions {
+  model?: string;
+  systemPrompt?: string;
+}
+
+/**
+ * Extract TOPs (agenda items) from a PDF meeting invitation.
+ */
+export async function extractTOPsFromPDF(
+  pdfFile: File,
+  options?: ExtractTOPsOptions
+): Promise<string[]> {
+  const formData = new FormData();
+  formData.append("pdf", pdfFile);
+
+  // Add optional parameters as form fields
+  if (options?.model) {
+    formData.append("model", options.model);
+  }
+  if (options?.systemPrompt) {
+    formData.append("system_prompt", options.systemPrompt);
+  }
+
+  const response = await fetch(`${API_BASE}/api/extract-tops`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Fehler beim Extrahieren der TOPs");
+  }
+
+  const data = await response.json();
+  return data.tops;
 }
 
 /**

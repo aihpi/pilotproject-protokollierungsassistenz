@@ -5,6 +5,10 @@ import UploadStep from './components/UploadStep';
 import ProcessingStep from './components/ProcessingStep';
 import AssignmentStep from './components/AssignmentStep';
 import SummaryStep from './components/SummaryStep';
+import LLMSettingsPanel, {
+  DEFAULT_LLM_SETTINGS,
+  type LLMSettings,
+} from './components/LLMSettingsPanel';
 import {
   startTranscription as apiStartTranscription,
   pollTranscription,
@@ -12,6 +16,9 @@ import {
   checkBackendHealth,
 } from './api';
 import type { TranscriptLine } from './types';
+
+// LocalStorage key for LLM settings
+const LLM_SETTINGS_KEY = 'llm-settings';
 
 export default function App() {
   // Current step in wizard
@@ -32,11 +39,36 @@ export default function App() {
   const [summaries, setSummaries] = useState<Record<number, string>>({});
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
+
+  // LLM Settings state
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [llmSettings, setLlmSettings] = useState<LLMSettings>(() => {
+    // Load from localStorage on initial render
+    try {
+      const saved = localStorage.getItem(LLM_SETTINGS_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error('Failed to load LLM settings from localStorage:', e);
+    }
+    return DEFAULT_LLM_SETTINGS;
+  });
 
   // Check backend availability on mount
   useEffect(() => {
     checkBackendHealth().then(setBackendAvailable);
   }, []);
+
+  // Save LLM settings to localStorage when they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(LLM_SETTINGS_KEY, JSON.stringify(llmSettings));
+    } catch (e) {
+      console.error('Failed to save LLM settings to localStorage:', e);
+    }
+  }, [llmSettings]);
 
   // Start transcription via backend API
   const startTranscription = async () => {
@@ -88,7 +120,7 @@ export default function App() {
     } else {
       // Show error - backend not available
       alert(
-        'Backend nicht erreichbar. Bitte starten Sie den Server mit:\n\ncd backend && uv run uvicorn main:app --reload'
+        'Backend nicht erreichbar. Bitte starten Sie den Server mit:\n\ncd backend && uv run uvicorn main:app'
       );
     }
   };
@@ -101,24 +133,38 @@ export default function App() {
     const validTops = tops.filter((t) => t.trim() !== '');
     const newSummaries: Record<number, string> = {};
 
+    console.log(`[Summary] Starting generation for ${validTops.length} TOPs`);
+
     for (let index = 0; index < validTops.length; index++) {
       const topLines = transcript.filter((_, i) => assignments[i] === index);
+      console.log(`[Summary] TOP ${index + 1}: ${topLines.length} lines assigned`);
+
       if (topLines.length > 0) {
         // Set placeholder while generating
         newSummaries[index] = 'Zusammenfassung wird generiert...';
         setSummaries({ ...newSummaries });
 
         try {
-          const summary = await generateSummary(validTops[index]!, topLines);
+          console.log(`[Summary] Generating summary for TOP ${index + 1}...`);
+          const summary = await generateSummary(validTops[index]!, topLines, {
+            model: llmSettings.model,
+            systemPrompt: llmSettings.systemPrompt,
+          });
+          console.log(`[Summary] TOP ${index + 1} complete, length: ${summary.length}`);
           newSummaries[index] = summary;
           setSummaries({ ...newSummaries });
         } catch (error) {
+          console.error(`[Summary] TOP ${index + 1} failed:`, error);
           const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
           newSummaries[index] = `Fehler: ${errorMessage}`;
           setSummaries({ ...newSummaries });
         }
+      } else {
+        console.log(`[Summary] TOP ${index + 1}: skipped (no lines)`);
       }
     }
+
+    console.log(`[Summary] All TOPs processed`);
   };
 
   const handleStep2Back = () => {
@@ -140,7 +186,10 @@ export default function App() {
     const topLines = transcript.filter((_, i) => assignments[i] === topIndex);
 
     try {
-      const summary = await generateSummary(validTops[topIndex]!, topLines);
+      const summary = await generateSummary(validTops[topIndex]!, topLines, {
+        model: llmSettings.model,
+        systemPrompt: llmSettings.systemPrompt,
+      });
       setSummaries((prev) => ({ ...prev, [topIndex]: summary }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
@@ -162,13 +211,21 @@ export default function App() {
   const validTops = tops.filter((t) => t.trim() !== '');
 
   return (
-    <Layout>
+    <Layout onSettingsClick={() => setIsSettingsOpen(true)}>
+      {/* LLM Settings Panel */}
+      <LLMSettingsPanel
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={llmSettings}
+        onSettingsChange={setLlmSettings}
+      />
+
       {/* Backend status indicator */}
       {backendAvailable === false && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
           Backend nicht erreichbar. Starten Sie den Server mit:{' '}
           <code className="bg-yellow-100 px-1 rounded">
-            cd backend && uv run uvicorn main:app --reload
+            cd backend && uv run uvicorn main:app
           </code>
         </div>
       )}
@@ -200,6 +257,7 @@ export default function App() {
           setAudioFile={setAudioFile}
           tops={tops}
           setTops={setTops}
+          llmSettings={llmSettings}
         />
       ) : currentStep === 2 ? (
         <AssignmentStep
@@ -210,6 +268,8 @@ export default function App() {
           assignments={assignments}
           setAssignments={setAssignments}
           audioUrl={audioUrl ?? undefined}
+          speakerNames={speakerNames}
+          setSpeakerNames={setSpeakerNames}
         />
       ) : (
         <SummaryStep
@@ -222,6 +282,7 @@ export default function App() {
           onRegenerateSummary={handleRegenerateSummary}
           isGenerating={isGeneratingSummary}
           audioUrl={audioUrl ?? undefined}
+          speakerNames={speakerNames}
         />
       )}
     </Layout>

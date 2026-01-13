@@ -11,6 +11,10 @@ Configuration via environment variables:
 - WHISPER_DEVICE: Device to use - cuda/cpu (default: auto-detect)
 - WHISPER_BATCH_SIZE: Batch size for transcription (default: 16)
 - WHISPER_LANGUAGE: Language code (default: de)
+
+NOTE: For GPU support, you must set LD_LIBRARY_PATH before starting the server:
+  export LD_LIBRARY_PATH=$(python -c "import nvidia.cudnn; print(nvidia.cudnn.__path__[0])")/lib:$LD_LIBRARY_PATH
+See: https://github.com/m-bain/whisperX/issues/902
 """
 
 import os
@@ -135,10 +139,14 @@ def load_models() -> TranscriptionModels:
 
 
 def _cleanup_memory(device: str) -> None:
-    """Force memory cleanup after transcription."""
+    """Force memory cleanup after transcription to prevent OOM on subsequent runs."""
     gc.collect()
-    if device == "cuda" and torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    try:
+        if device == "cuda" and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            logger.info("GPU memory cache cleared")
+    except Exception as e:
+        logger.warning(f"Failed to clear GPU cache: {e}")
 
 
 def transcribe_audio(
@@ -221,21 +229,28 @@ def transcribe_audio(
         if progress_callback:
             progress_callback(95, "Transkript wird erstellt...")
 
-        # Convert to our format (including timestamps for audio sync)
+        # Convert to our format and merge consecutive segments from same speaker
+        # Keep timestamps for audio sync - extend end time when merging
         logger.info("Creating transcript output...")
         transcript = []
+        raw_segment_count = len(result["segments"])
         for segment in result["segments"]:
             speaker = segment.get("speaker", "UNKNOWN")
             text = segment.get("text", "").strip()
             if text:
-                transcript.append({
-                    "speaker": speaker,
-                    "text": text,
-                    "start": segment.get("start", 0.0),
-                    "end": segment.get("end", 0.0),
-                })
+                # Merge with previous segment if same speaker
+                if transcript and transcript[-1]["speaker"] == speaker:
+                    transcript[-1]["text"] += " " + text
+                    transcript[-1]["end"] = segment.get("end", transcript[-1]["end"])
+                else:
+                    transcript.append({
+                        "speaker": speaker,
+                        "text": text,
+                        "start": segment.get("start", 0.0),
+                        "end": segment.get("end", 0.0),
+                    })
 
-        logger.info(f"Transcription finished: {len(transcript)} lines")
+        logger.info(f"Transcription finished: {len(transcript)} lines (merged from {raw_segment_count} segments)")
         return transcript
 
     finally:

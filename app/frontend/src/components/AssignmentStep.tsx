@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, type MouseEvent } from 'react';
 import type { AssignmentStepProps, TopColor } from '../types';
 import AudioPlayer from './AudioPlayer';
 import { useAudioSync } from '../hooks/useAudioSync';
+import SpeakerNameEditor from './SpeakerNameEditor';
 
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -29,6 +30,8 @@ export default function AssignmentStep({
   assignments,
   setAssignments,
   audioUrl,
+  speakerNames,
+  setSpeakerNames,
 }: AssignmentStepProps) {
   const [selectedTop, setSelectedTop] = useState(0);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
@@ -53,6 +56,9 @@ export default function AssignmentStep({
       }
     }
   }, [currentLineIndex, isAutoScroll]);
+
+  // Helper to get display name for a speaker
+  const getDisplayName = (speakerId: string) => speakerNames[speakerId] || speakerId;
 
   const getColor = (topIndex: number): TopColor => topColors[topIndex % topColors.length]!;
 
@@ -110,6 +116,13 @@ export default function AssignmentStep({
           farblich markiert{audioUrl && ' → Doppelklick auf Zeile zum Abspielen'}
         </p>
       </div>
+
+      {/* Speaker Name Editor */}
+      <SpeakerNameEditor
+        transcript={transcript}
+        speakerNames={speakerNames}
+        setSpeakerNames={setSpeakerNames}
+      />
 
       {/* Progress */}
       <div className="flex items-center justify-between text-sm text-gray-600">
@@ -203,7 +216,7 @@ export default function AssignmentStep({
                   } ${isCurrentLine ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}
                 >
                   <span className="font-medium text-gray-600">
-                    {line.speaker}:
+                    {getDisplayName(line.speaker)}:
                   </span>{' '}
                   <span className="text-gray-800">{line.text}</span>
                   <span className="ml-2 text-xs text-gray-400">

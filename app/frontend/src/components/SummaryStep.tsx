@@ -19,6 +19,7 @@ export default function SummaryStep({
   onRegenerateSummary,
   isGenerating,
   audioUrl,
+  speakerNames,
 }: SummaryStepProps) {
   const [selectedTop, setSelectedTop] = useState(0);
   const [editingTop, setEditingTop] = useState<number | null>(null);
@@ -52,6 +53,9 @@ export default function SummaryStep({
       }
     }
   }, [currentLineIndex, isAutoScroll, selectedTop]);
+
+  // Helper to get display name for a speaker
+  const getDisplayName = (speakerId: string) => speakerNames[speakerId] || speakerId;
 
   const getTranscriptForTop = (topIndex: number) => {
     return transcript.filter((_, i) => assignments[i] === topIndex);
@@ -260,7 +264,7 @@ export default function SummaryStep({
                       }`}
                     >
                       <span className="font-medium text-gray-500">
-                        {line.speaker}:
+                        {getDisplayName(line.speaker)}:
                       </span>{' '}
                       <span className="text-gray-700">{line.text}</span>
                       <span className="ml-2 text-xs text-gray-400">

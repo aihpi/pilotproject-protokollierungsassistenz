@@ -22,20 +22,59 @@ LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3:8b")
 
 
-def summarize_segment(top_title: str, transcript_text: str) -> str:
+from typing import Optional
+
+# Default system prompt for meeting summarization
+DEFAULT_SYSTEM_PROMPT = """Du bist ein Experte für die Erstellung von Sitzungsprotokollen für deutsche Kommunalverwaltungen.
+
+Deine Aufgabe ist es, aus einem Transkript eines Tagesordnungspunktes (TOP) eine Zusammenfassung im Stil einer offiziellen Niederschrift zu erstellen.
+
+STIL:
+- Formale Verwaltungssprache, dritte Person
+- Beispiel: "Die Vorsitzende erläuterte den Sachverhalt.", "Herr Müller wies auf die Kostenfrage hin."
+- Paraphrasieren statt wörtlich zitieren
+
+INHALT:
+- Wesentliche Diskussionspunkte und Argumente
+- Getroffene Beschlüsse mit Abstimmungsergebnis (z.B. "einstimmig beschlossen", "mit 5:2 Stimmen angenommen")
+- Wichtige Positionen der Teilnehmer
+- Vereinbarte Maßnahmen oder nächste Schritte
+
+IGNORIEREN:
+- Verfahrensdetails (Mikrofon, Redezeit, Begrüßungen)
+- Füllwörter, Versprecher, triviale Zwischenbemerkungen
+- Technische Störungen
+
+FORMAT:
+- Kurze TOPs (< 10 Äußerungen): 1-2 Absätze
+- Mittlere TOPs (10-50 Äußerungen): 2-3 Absätze
+- Lange TOPs (> 50 Äußerungen): 3-5 Absätze
+- Chronologischer Ablauf
+- Direkt mit Inhalt beginnen, keine Einleitung
+"""
+
+
+def summarize_segment(
+    top_title: str,
+    transcript_text: str,
+    model: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+) -> str:
     """
     Generate a summary for a meeting segment (TOP) using Ollama.
 
     Args:
         top_title: Title of the agenda item (TOP)
         transcript_text: Full transcript text for this TOP
+        model: LLM model to use (default: from env or qwen3:8b)
+        system_prompt: Custom system prompt (default: DEFAULT_SYSTEM_PROMPT)
 
     Returns:
         Summary text in German
 
     Requires Ollama running:
         ollama serve
-        ollama pull qwen3:8b
+        ollama pull <model>
     """
     try:
         from openai import OpenAI
@@ -49,19 +88,9 @@ def summarize_segment(top_title: str, transcript_text: str) -> str:
         api_key="ollama",  # Ollama doesn't require a real API key
     )
 
-    system_prompt = """Du bist ein Experte für die Erstellung von Sitzungsprotokollen für deutsche Kommunalverwaltungen.
-
-Deine Aufgabe ist es, aus einem Transkript eines Tagesordnungspunktes (TOP) eine prägnante Zusammenfassung zu erstellen.
-
-Regeln:
-- Schreibe in sachlichem, amtlichem Deutsch
-- Fasse die wichtigsten Diskussionspunkte zusammen
-- Erwähne getroffene Beschlüsse oder Abstimmungsergebnisse
-- Nenne wichtige Positionen der Teilnehmer (ohne Namen, nur Funktionen wenn bekannt)
-- Halte die Zusammenfassung auf 3-5 Absätze
-- Vermeide wörtliche Zitate, paraphrasiere stattdessen
-- Beginne direkt mit dem Inhalt, keine Einleitung wie "In dieser Sitzung..."
-"""
+    # Use provided values or fall back to defaults
+    actual_model = model or LLM_MODEL
+    actual_system_prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
 
     user_prompt = f"""Erstelle eine Zusammenfassung für folgenden Tagesordnungspunkt:
 
@@ -73,9 +102,9 @@ Transkript:
 Zusammenfassung:"""
 
     response = client.chat.completions.create(
-        model=LLM_MODEL,
+        model=actual_model,
         messages=[
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": actual_system_prompt},
             {"role": "user", "content": user_prompt},
         ],
         max_tokens=1024,
