@@ -159,7 +159,10 @@ export default function AssignmentStep({
                   <div className="flex items-start gap-2">
                     <div className={`w-3 h-3 rounded-full mt-1 ${color.dot}`} />
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">
+                      <div
+                        className="font-medium text-sm truncate"
+                        title={top || `TOP ${index + 1}`}
+                      >
                         {index + 1}. {top || `TOP ${index + 1}`}
                       </div>
                       <div className="text-xs text-gray-500 mt-1">

@@ -51,6 +51,7 @@ FORMAT:
 - Lange TOPs (> 50 Äußerungen): 3-5 Absätze
 - Chronologischer Ablauf
 - Direkt mit Inhalt beginnen, keine Einleitung
+- NUR Fließtext, KEINE Markdown-Formatierung (keine **, keine #)
 """
 
 

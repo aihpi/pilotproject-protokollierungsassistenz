@@ -58,7 +58,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Sitzungsprotokoll Generator API",
+    title="Protokollierungsassistenz API",
     description="API für die automatische Erstellung von Sitzungsprotokollen",
     version="0.1.0",
     lifespan=lifespan,
@@ -173,7 +173,7 @@ class ExtractTOPsResponse(BaseModel):
 
 @app.get("/")
 async def root():
-    return {"message": "Sitzungsprotokoll Generator API", "version": "0.1.0"}
+    return {"message": "Protokollierungsassistenz API", "version": "0.1.0"}
 
 
 @app.get("/health")

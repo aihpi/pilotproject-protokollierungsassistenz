@@ -142,7 +142,10 @@ export default function SummaryStep({
                       }`}
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">
+                      <div
+                        className="font-medium text-sm truncate"
+                        title={top || `TOP ${index + 1}`}
+                      >
                         {index + 1}. {top || `TOP ${index + 1}`}
                       </div>
                     </div>

@@ -1,5 +1,5 @@
 /**
- * Shared type definitions for the Sitzungsprotokoll Generator
+ * Shared type definitions for the Protokollierungsassistenz
  */
 
 // API Types

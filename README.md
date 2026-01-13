@@ -1,4 +1,4 @@
-# Sitzungsprotokoll Generator
+# Protokollierungsassistenz
 
 Automatic transcription and meeting minutes generation from audio recordings of German municipal meetings.
 

@@ -1,5 +1,5 @@
 /**
- * API client for the Sitzungsprotokoll Generator backend
+ * API client for the Protokollierungsassistenz backend
  */
 
 import type { TranscriptLine, TranscriptionJob } from "./types";
