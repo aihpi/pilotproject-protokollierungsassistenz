@@ -63,29 +63,7 @@ Nach der Installation **starten Sie Docker Desktop** und warten Sie, bis "Docker
 
 ---
 
-### Step 3: Get a HuggingFace Token
-
-A HuggingFace token is required for speaker identification (recognizing different speakers in the recording).
-
-Ein HuggingFace-Token wird für die Sprechererkennung benötigt (Erkennung verschiedener Sprecher in der Aufnahme).
-
-#### How to get your token / So erhalten Sie Ihren Token:
-
-1. Go to: **https://huggingface.co/settings/tokens**
-2. Create an account or log in / Erstellen Sie ein Konto oder melden Sie sich an
-3. Click **"Create new token"** / Klicken Sie auf **"Create new token"**
-4. Enter a name (e.g., "Meeting Assistant") / Geben Sie einen Namen ein (z.B. "Meeting Assistant")
-5. Select **"Read"** access / Wählen Sie **"Read"** Zugriff
-6. Click **"Create token"** / Klicken Sie auf **"Create token"**
-7. **Copy the token** (starts with `hf_`) / **Kopieren Sie den Token** (beginnt mit `hf_`)
-
-Keep this token ready for the next step!
-
-Halten Sie diesen Token für den nächsten Schritt bereit!
-
----
-
-### Step 4: Run the Setup Script
+### Step 3: Run the Setup Script
 
 #### Windows
 
@@ -93,7 +71,6 @@ Halten Sie diesen Token für den nächsten Schritt bereit!
 2. Find the file **`setup.ps1`**
 3. **Right-click** on it and select **"Run with PowerShell"**
 4. Follow the on-screen instructions
-5. When asked, paste your HuggingFace token
 
 If you see a security warning, click "Run anyway" or "More info" → "Run anyway".
 
@@ -109,15 +86,14 @@ If you see a security warning, click "Run anyway" or "More info" → "Run anyway
    ./setup.sh
    ```
 4. Follow the on-screen instructions
-5. When asked, paste your HuggingFace token
 
 ---
 
-### Step 5: Wait for Download
+### Step 4: Wait for Download
 
-The setup will download AI models (~8 GB). This may take **10-30 minutes** depending on your internet speed.
+The setup will download the application images (~6 GB) and AI models (~5 GB). This may take **5-15 minutes** depending on your internet speed.
 
-Das Setup lädt KI-Modelle herunter (~8 GB). Dies kann je nach Internetgeschwindigkeit **10-30 Minuten** dauern.
+Das Setup lädt die Anwendungsimages (~6 GB) und KI-Modelle (~5 GB) herunter. Dies kann je nach Internetgeschwindigkeit **5-15 Minuten** dauern.
 
 You will see progress messages. When complete, your browser will open automatically.
 
@@ -125,7 +101,7 @@ Sie sehen Fortschrittsmeldungen. Nach Abschluss öffnet sich Ihr Browser automat
 
 ---
 
-### Step 6: Start Using the Application
+### Step 5: Start Using the Application
 
 Once setup is complete, the application is available at:
 
@@ -183,13 +159,6 @@ Geben Sie mindestens 25 GB Speicherplatz frei, bevor Sie das Setup ausführen.
 - First transcription may take longer due to model loading
 - Ensure Docker Desktop has enough memory allocated (8 GB+)
 
-### "HuggingFace token invalid"
-
-Make sure the token:
-- Starts with `hf_`
-- Has "Read" access
-- Is not expired
-
 ### View Logs
 
 To see what's happening:
@@ -206,7 +175,6 @@ If something goes wrong and you want to start fresh:
 
 ```bash
 docker compose down -v
-rm .env
 ./setup.sh  # or .\setup.ps1 on Windows
 ```
 
@@ -271,8 +239,19 @@ protokollierungsassistenz/
 │   ├── frontend/          # React + TypeScript web application
 │   └── backend/           # FastAPI Python backend
 ├── scripts/               # Setup and utility scripts
+├── .github/workflows/     # CI/CD for building Docker images
 └── docker-compose.yml     # Production deployment
 ```
+
+### Pre-built Images
+
+Docker images are automatically built and published to GitHub Container Registry:
+
+- `ghcr.io/aihpi/pilotproject-protokollierungsassistenz/frontend:latest`
+- `ghcr.io/aihpi/pilotproject-protokollierungsassistenz/backend:cpu-latest`
+- `ghcr.io/aihpi/pilotproject-protokollierungsassistenz/backend:gpu-latest`
+
+These images include all ML models pre-bundled, so no HuggingFace token is required for end users.
 
 ### Development Setup
 
@@ -320,11 +299,23 @@ npm run dev
 
 The frontend runs on `http://localhost:5173`.
 
+### Building Docker Images Locally
+
+To build images locally (requires HuggingFace token):
+
+```bash
+# CPU image
+docker build --build-arg HF_TOKEN=$HF_TOKEN -t backend:cpu ./app/backend
+
+# GPU image
+docker build -f Dockerfile.gpu --build-arg HF_TOKEN=$HF_TOKEN -t backend:gpu ./app/backend
+```
+
 ### Environment Variables
 
 | Variable             | Description                                         | Default                     |
 | -------------------- | --------------------------------------------------- | --------------------------- |
-| `HF_TOKEN`           | HuggingFace access token (required for diarization) | -                           |
+| `HF_TOKEN`           | HuggingFace token (only for local builds)           | -                           |
 | `WHISPER_MODEL`      | Whisper model size                                  | `large-v2`                  |
 | `WHISPER_DEVICE`     | Device for inference (`cuda`, `cpu`, `auto`)        | `auto`                      |
 | `WHISPER_BATCH_SIZE` | Batch size for transcription                        | `16`                        |

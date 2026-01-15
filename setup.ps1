@@ -4,7 +4,7 @@
 #
 # Requirements:
 # - Docker Desktop installed
-# - Internet connection (for downloading models ~8GB)
+# - Internet connection (for downloading images ~6GB + LLM model ~5GB)
 # - At least 25GB free disk space
 # - At least 8GB RAM
 #
@@ -123,77 +123,28 @@ if ($nvidiaSmi) {
     Write-Info "No NVIDIA GPU detected, using CPU mode"
 }
 
-# Step 5: Setup HuggingFace token
-Write-Info "Setting up HuggingFace token..."
-Write-Host ""
-Write-Host "A HuggingFace token is required for speaker identification."
-Write-Host "This allows the system to identify different speakers in the recording."
-Write-Host ""
-
-$envFile = Join-Path $ScriptDir ".env"
-$tokenExists = $false
-
-if (Test-Path $envFile) {
-    $envContent = Get-Content $envFile -Raw
-    if ($envContent -match "HF_TOKEN=hf_") {
-        $tokenExists = $true
-        Write-Success "HuggingFace token found in .env file"
-    }
-}
-
-if (-not $tokenExists) {
-    Write-Host "To get your token:"
-    Write-Host "  1. Go to: https://huggingface.co/settings/tokens"
-    Write-Host "  2. Create an account or log in"
-    Write-Host "  3. Click 'New token' and create a token with 'Read' access"
-    Write-Host "  4. Copy the token (starts with 'hf_')"
-    Write-Host ""
-
-    # Try to open the URL
-    Start-Process "https://huggingface.co/settings/tokens"
-
-    while ($true) {
-        $hfToken = Read-Host "Enter your HuggingFace token"
-        if ($hfToken -match "^hf_") {
-            break
-        } else {
-            Write-Error "Invalid token format. Token should start with 'hf_'"
-        }
-    }
-
-    # Create or update .env file
-    if (Test-Path $envFile) {
-        $envContent = Get-Content $envFile -Raw
-        if ($envContent -match "HF_TOKEN=") {
-            $envContent = $envContent -replace "HF_TOKEN=.*", "HF_TOKEN=$hfToken"
-        } else {
-            $envContent += "`nHF_TOKEN=$hfToken"
-        }
-        Set-Content -Path $envFile -Value $envContent.Trim()
-    } else {
-        Set-Content -Path $envFile -Value "HF_TOKEN=$hfToken"
-    }
-    Write-Success "HuggingFace token saved"
-}
+# Step 5: Create uploads directory
+New-Item -ItemType Directory -Force -Path "uploads" | Out-Null
 
 # Step 6: Start the application
 Write-Host ""
 Write-Info "Starting the application..."
-Write-Host "This will download required components (~8GB). This may take 10-30 minutes."
+Write-Host "This will download pre-built images (~6GB) and the summarization model (~5GB)."
+Write-Host "This may take 5-15 minutes depending on your internet speed."
 Write-Host ""
 
 if ($useGPU) {
     Write-Info "Starting in GPU mode..."
-    docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+    docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 } else {
     Write-Info "Starting in CPU mode..."
-    docker compose up -d --build
+    docker compose up -d
 }
 
 # Step 7: Wait for services to be ready
 Write-Host ""
 Write-Info "Waiting for services to start..."
-Write-Host "The system is downloading AI models. This may take several minutes."
+Write-Host "The system is loading AI models. This may take a few minutes."
 Write-Host ""
 
 $maxWait = 600  # 10 minutes

@@ -110,17 +110,23 @@ def load_models() -> TranscriptionModels:
 
     # Load diarization pipeline
     hf_token = os.environ.get("HF_TOKEN")
-    if not hf_token:
-        logger.error("HF_TOKEN not set")
+    models_precached = os.environ.get("MODELS_PRECACHED") == "1"
+
+    # When models are pre-cached (Docker image with bundled models), HF_TOKEN is not required
+    # PyAnnote will load from the local cache without authentication
+    if not hf_token and not models_precached:
+        logger.error("HF_TOKEN not set and models not pre-cached")
         raise RuntimeError(
-            "HuggingFace Token nicht gesetzt. "
-            "Setzen Sie die HF_TOKEN Umgebungsvariable. "
-            "Token erstellen unter: https://huggingface.co/settings/tokens"
+            "HuggingFace Token nicht gesetzt und Modelle nicht vorinstalliert. "
+            "Setzen Sie die HF_TOKEN Umgebungsvariable oder verwenden Sie das "
+            "vorgefertigte Docker-Image mit vorinstallierten Modellen."
         )
 
     logger.info("[3/3] Loading diarization pipeline...")
+    if models_precached:
+        logger.info("Using pre-cached models (no HF_TOKEN required)")
     diarize_pipeline = DiarizationPipeline(
-        use_auth_token=hf_token,
+        use_auth_token=hf_token if hf_token else None,
         device=device,
     )
     logger.info("[3/3] Diarization pipeline loaded successfully")

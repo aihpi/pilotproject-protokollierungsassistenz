@@ -5,7 +5,7 @@
 #
 # Requirements:
 # - Docker Desktop installed
-# - Internet connection (for downloading models ~8GB)
+# - Internet connection (for downloading images ~6GB + LLM model ~5GB)
 # - At least 25GB free disk space
 # - At least 8GB RAM
 #
@@ -123,67 +123,28 @@ else
     info "macOS detected - using CPU mode (NVIDIA GPUs not supported on Mac)"
 fi
 
-# Step 5: Setup HuggingFace token
-info "Setting up HuggingFace token..."
-echo ""
-echo "A HuggingFace token is required for speaker identification."
-echo "This allows the system to identify different speakers in the recording."
-echo ""
-
-ENV_FILE="$SCRIPT_DIR/.env"
-
-if [ -f "$ENV_FILE" ] && grep -q "HF_TOKEN=hf_" "$ENV_FILE"; then
-    success "HuggingFace token found in .env file"
-else
-    echo "To get your token:"
-    echo "  1. Go to: https://huggingface.co/settings/tokens"
-    echo "  2. Create an account or log in"
-    echo "  3. Click 'New token' and create a token with 'Read' access"
-    echo "  4. Copy the token (starts with 'hf_')"
-    echo ""
-
-    while true; do
-        read -p "Enter your HuggingFace token: " HF_TOKEN
-        if [[ $HF_TOKEN == hf_* ]]; then
-            break
-        else
-            error "Invalid token format. Token should start with 'hf_'"
-        fi
-    done
-
-    # Create or update .env file
-    if [ -f "$ENV_FILE" ]; then
-        # Update existing file
-        if grep -q "HF_TOKEN=" "$ENV_FILE"; then
-            sed -i.bak "s/HF_TOKEN=.*/HF_TOKEN=$HF_TOKEN/" "$ENV_FILE"
-            rm -f "$ENV_FILE.bak"
-        else
-            echo "HF_TOKEN=$HF_TOKEN" >> "$ENV_FILE"
-        fi
-    else
-        echo "HF_TOKEN=$HF_TOKEN" > "$ENV_FILE"
-    fi
-    success "HuggingFace token saved"
-fi
+# Step 5: Create uploads directory
+mkdir -p uploads
 
 # Step 6: Start the application
 echo ""
 info "Starting the application..."
-echo "This will download required components (~8GB). This may take 10-30 minutes."
+echo "This will download pre-built images (~6GB) and the summarization model (~5GB)."
+echo "This may take 5-15 minutes depending on your internet speed."
 echo ""
 
 if [ "$USE_GPU" = true ]; then
     info "Starting in GPU mode..."
-    docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+    docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 else
     info "Starting in CPU mode..."
-    docker compose up -d --build
+    docker compose up -d
 fi
 
 # Step 7: Wait for services to be ready
 echo ""
 info "Waiting for services to start..."
-echo "The system is downloading AI models. This may take several minutes."
+echo "The system is loading AI models. This may take a few minutes."
 echo ""
 
 # Wait for backend to be healthy (with progress indicator)

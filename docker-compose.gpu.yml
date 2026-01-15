@@ -1,5 +1,5 @@
 # Docker Compose override for GPU deployment
-# Usage: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+# Usage: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 #
 # Requirements:
 # - NVIDIA GPU
@@ -8,9 +8,7 @@
 
 services:
   backend:
-    build:
-      context: ./app/backend
-      dockerfile: Dockerfile.gpu
+    image: ghcr.io/aihpi/pilotproject-protokollierungsassistenz/backend:gpu-latest
     environment:
       - WHISPER_DEVICE=cuda
     deploy:
