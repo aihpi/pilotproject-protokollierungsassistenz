@@ -16,6 +16,8 @@ The server provides an OpenAI-compatible API at http://localhost:11434/v1
 """
 
 import os
+import time
+from dataclasses import dataclass
 
 # LLM server configuration (Ollama)
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1")
@@ -23,6 +25,14 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3:8b")
 
 
 from typing import Optional
+
+
+@dataclass
+class SummarizationResult:
+    """Result from summarization including timing."""
+    summary: str
+    duration_seconds: float
+
 
 # Default system prompt for meeting summarization
 DEFAULT_SYSTEM_PROMPT = """Du bist ein Experte für die Erstellung von Sitzungsprotokollen für deutsche Kommunalverwaltungen.
@@ -60,7 +70,7 @@ def summarize_segment(
     transcript_text: str,
     model: Optional[str] = None,
     system_prompt: Optional[str] = None,
-) -> str:
+) -> SummarizationResult:
     """
     Generate a summary for a meeting segment (TOP) using Ollama.
 
@@ -71,7 +81,7 @@ def summarize_segment(
         system_prompt: Custom system prompt (default: DEFAULT_SYSTEM_PROMPT)
 
     Returns:
-        Summary text in German
+        SummarizationResult with summary text and duration in seconds
 
     Requires Ollama running:
         ollama serve
@@ -102,6 +112,7 @@ Transkript:
 
 Zusammenfassung:"""
 
+    start_time = time.time()
     response = client.chat.completions.create(
         model=actual_model,
         messages=[
@@ -111,8 +122,10 @@ Zusammenfassung:"""
         max_tokens=1024,
         temperature=0.3,  # Lower temperature for more consistent output
     )
+    duration_seconds = time.time() - start_time
 
-    return response.choices[0].message.content or ""
+    summary = response.choices[0].message.content or ""
+    return SummarizationResult(summary=summary, duration_seconds=duration_seconds)
 
 
 def summarize_all_segments(

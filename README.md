@@ -180,6 +180,29 @@ docker compose down -v
 
 ---
 
+## Nutzungsstatistiken / Usage Statistics
+
+Diese Anwendung sendet anonyme Nutzungsstatistiken, um uns bei der Weiterentwicklung zu helfen.
+
+This application sends anonymous usage statistics to help us improve the tool.
+
+### Erfasste Daten / Data Collected
+
+- Audiodauer und Verarbeitungszeiten / Audio duration and processing times
+- Hardware-Informationen (GPU-Typ, Speicher) / Hardware info (GPU type, memory)
+- Verwendete Modelle (Whisper, LLM) / Models used (Whisper, LLM)
+- Anzahl Tagesordnungspunkte / Number of agenda items
+- Textlängen (Transkript, Protokoll) / Text lengths (transcript, protocol)
+- Verwendeter System-Prompt / System prompt used
+
+### Nicht erfasste Daten / Data NOT Collected
+
+- Inhalte von Transkripten oder Protokollen / Transcript or protocol content
+- Namen oder persönliche Daten / Names or personal data
+- Audio-Dateien / Audio files
+
+---
+
 ## GPU Mode (Optional, Windows/Linux)
 
 If you have an NVIDIA GPU and want faster transcription:
@@ -322,17 +345,19 @@ docker build -f Dockerfile.gpu --build-arg HF_TOKEN=$HF_TOKEN -t backend:gpu ./a
 | `WHISPER_LANGUAGE`   | Language code                                       | `de`                        |
 | `LLM_BASE_URL`       | Ollama API endpoint                                 | `http://localhost:11434/v1` |
 | `LLM_MODEL`          | Model name for summarization                        | `qwen3:8b`                  |
+| `TELEMETRY_WEBHOOK_URL` | Google Apps Script webhook URL for telemetry     | (empty, disabled)           |
 
 ### API Endpoints
 
-| Endpoint                   | Method | Description                          |
-| -------------------------- | ------ | ------------------------------------ |
-| `/health`                  | GET    | Health check                         |
-| `/api/transcribe`          | POST   | Upload audio and start transcription |
-| `/api/transcribe/{job_id}` | GET    | Get transcription job status         |
-| `/api/audio/{job_id}`      | GET    | Stream audio file                    |
-| `/api/summarize`           | POST   | Generate summary for a TOP segment   |
-| `/api/extract-tops`        | POST   | Extract TOPs from PDF                |
+| Endpoint                         | Method | Description                          |
+| -------------------------------- | ------ | ------------------------------------ |
+| `/health`                        | GET    | Health check                         |
+| `/api/transcribe`                | POST   | Upload audio and start transcription |
+| `/api/transcribe/{job_id}`       | GET    | Get transcription job status         |
+| `/api/audio/{job_id}`            | GET    | Stream audio file                    |
+| `/api/summarize`                 | POST   | Generate summary for a TOP segment   |
+| `/api/extract-tops`              | POST   | Extract TOPs from PDF                |
+| `/api/telemetry/session-complete`| POST   | Report session completion telemetry  |
 
 ### Technology Stack
 

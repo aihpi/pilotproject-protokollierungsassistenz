@@ -14,6 +14,7 @@ import {
   pollTranscription,
   generateSummary,
   checkBackendHealth,
+  reportSessionComplete,
 } from './api';
 import type { TranscriptLine } from './types';
 
@@ -40,6 +41,9 @@ export default function App() {
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
+
+  // Telemetry state
+  const [jobId, setJobId] = useState<string | null>(null);
 
   // LLM Settings state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -82,6 +86,9 @@ export default function App() {
     try {
       // Start transcription job
       const job = await apiStartTranscription(audioFile);
+
+      // Store job ID for telemetry
+      setJobId(job.job_id);
 
       // Poll for completion
       const completedJob = await pollTranscription(
@@ -129,6 +136,8 @@ export default function App() {
     // Move to step 3 first
     setCurrentStep(3);
 
+    let totalDuration = 0;
+
     // Generate summaries for each TOP with assigned lines
     const validTops = tops.filter((t) => t.trim() !== '');
     const newSummaries: Record<number, string> = {};
@@ -146,12 +155,13 @@ export default function App() {
 
         try {
           console.log(`[Summary] Generating summary for TOP ${index + 1}...`);
-          const summary = await generateSummary(validTops[index]!, topLines, {
+          const result = await generateSummary(validTops[index]!, topLines, {
             model: llmSettings.model,
             systemPrompt: llmSettings.systemPrompt,
           });
-          console.log(`[Summary] TOP ${index + 1} complete, length: ${summary.length}`);
-          newSummaries[index] = summary;
+          console.log(`[Summary] TOP ${index + 1} complete, length: ${result.summary.length}, duration: ${result.durationSeconds}s`);
+          newSummaries[index] = result.summary;
+          totalDuration += result.durationSeconds;
           setSummaries({ ...newSummaries });
         } catch (error) {
           console.error(`[Summary] TOP ${index + 1} failed:`, error);
@@ -164,7 +174,24 @@ export default function App() {
       }
     }
 
-    console.log(`[Summary] All TOPs processed`);
+    console.log(`[Summary] All TOPs processed, total duration: ${totalDuration}s`);
+
+    // Send telemetry after all summaries are generated
+    if (jobId) {
+      const protocolCharCount = Object.values(newSummaries).reduce(
+        (sum, s) => sum + (s?.length || 0),
+        0
+      );
+      reportSessionComplete({
+        jobId,
+        topCount: validTops.length,
+        protocolCharCount,
+        summarizationDurationSeconds: totalDuration,
+        llmModel: llmSettings.model,
+        systemPrompt: llmSettings.systemPrompt,
+      });
+      console.log(`[Summary] Telemetry sent`);
+    }
   };
 
   const handleStep2Back = () => {
@@ -186,11 +213,11 @@ export default function App() {
     const topLines = transcript.filter((_, i) => assignments[i] === topIndex);
 
     try {
-      const summary = await generateSummary(validTops[topIndex]!, topLines, {
+      const result = await generateSummary(validTops[topIndex]!, topLines, {
         model: llmSettings.model,
         systemPrompt: llmSettings.systemPrompt,
       });
-      setSummaries((prev) => ({ ...prev, [topIndex]: summary }));
+      setSummaries((prev) => ({ ...prev, [topIndex]: result.summary }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
       setSummaries((prev) => ({

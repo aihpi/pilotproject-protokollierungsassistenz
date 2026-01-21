@@ -13,14 +13,31 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Header
+from fastapi import (
+    FastAPI,
+    UploadFile,
+    File,
+    Form,
+    HTTPException,
+    BackgroundTasks,
+    Header,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from transcribe import transcribe_audio, load_models, TranscriptionModels, _cleanup_memory
+from transcribe import (
+    transcribe_audio,
+    load_models,
+    TranscriptionModels,
+    TranscriptionResult,
+    _cleanup_memory,
+    WHISPER_MODEL,
+    WHISPER_BATCH_SIZE,
+)
 from summarize import summarize_segment
 from extract_tops import extract_tops_from_pdf
+from telemetry import TelemetryCollector
 
 # Configure logging with timestamps
 logging.basicConfig(
@@ -53,7 +70,7 @@ async def lifespan(app: FastAPI):
 
     # Cleanup on shutdown - properly release GPU resources
     logger.info("Server shutting down - cleaning up...")
-    if hasattr(app.state, 'models') and app.state.models is not None:
+    if hasattr(app.state, "models") and app.state.models is not None:
         device = app.state.models.device
         del app.state.models
         _cleanup_memory(device)
@@ -166,10 +183,27 @@ class SummarizeRequest(BaseModel):
 
 class SummarizeResponse(BaseModel):
     summary: str
+    duration_seconds: float
 
 
 class ExtractTOPsResponse(BaseModel):
     tops: List[str]
+
+
+class SessionCompleteRequest(BaseModel):
+    """Request model for reporting session completion with telemetry."""
+
+    job_id: str
+    top_count: int
+    protocol_char_count: int
+    summarization_duration_seconds: float
+    llm_model: str
+    system_prompt: str
+
+
+class SessionCompleteResponse(BaseModel):
+    success: bool
+    message: str
 
 
 # ----- Endpoints -----
@@ -188,14 +222,9 @@ async def health_check():
     """
     if not getattr(app.state, "models_loaded", False):
         raise HTTPException(
-            status_code=503,
-            detail="Models not loaded yet - server starting up"
+            status_code=503, detail="Models not loaded yet - server starting up"
         )
-    return {
-        "status": "healthy",
-        "models_loaded": True,
-        "version": "0.1.0"
-    }
+    return {"status": "healthy", "models_loaded": True, "version": "0.1.0"}
 
 
 @app.post("/api/transcribe", response_model=TranscriptionJob)
@@ -207,14 +236,16 @@ async def start_transcription(
     Upload audio file and start transcription job.
     Returns job_id to poll for status.
     """
-    logger.info(f"Received transcription request: {audio.filename} ({audio.content_type})")
+    logger.info(
+        f"Received transcription request: {audio.filename} ({audio.content_type})"
+    )
 
     # Check if models are loaded
     if not getattr(app.state, "models_loaded", False) or app.state.models is None:
         logger.error("Transcription request rejected - models not loaded")
         raise HTTPException(
             status_code=503,
-            detail="Server startet noch - Modelle werden geladen. Bitte warten."
+            detail="Server startet noch - Modelle werden geladen. Bitte warten.",
         )
 
     # Validate file type
@@ -255,7 +286,9 @@ async def start_transcription(
 
     # Start background transcription with pre-loaded models
     logger.info(f"Starting background transcription task for job: {job_id}")
-    background_tasks.add_task(run_transcription, job_id, str(file_path), app.state.models)
+    background_tasks.add_task(
+        run_transcription, job_id, str(file_path), app.state.models
+    )
 
     return TranscriptionJob(
         job_id=job_id,
@@ -376,13 +409,16 @@ async def generate_summary(request: SummarizeRequest):
     text = "\n".join([f"{line.speaker}: {line.text}" for line in request.lines])
 
     try:
-        summary = summarize_segment(
+        result = summarize_segment(
             request.top_title,
             text,
             model=request.model,
             system_prompt=request.system_prompt,
         )
-        return SummarizeResponse(summary=summary)
+        return SummarizeResponse(
+            summary=result.summary,
+            duration_seconds=result.duration_seconds,
+        )
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Fehler bei der Zusammenfassung: {str(e)}"
@@ -404,10 +440,7 @@ async def extract_tops_endpoint(
     # Validate file type
     if pdf.content_type != "application/pdf" and not pdf.filename.endswith(".pdf"):
         logger.warning(f"Rejected non-PDF file: {pdf.content_type}")
-        raise HTTPException(
-            status_code=400,
-            detail="Nur PDF-Dateien sind erlaubt"
-        )
+        raise HTTPException(status_code=400, detail="Nur PDF-Dateien sind erlaubt")
 
     # Save uploaded file temporarily
     file_id = str(uuid.uuid4())
@@ -433,8 +466,7 @@ async def extract_tops_endpoint(
     except Exception as e:
         logger.error(f"TOP extraction failed: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=500,
-            detail=f"Fehler bei der TOP-Extraktion: {str(e)}"
+            status_code=500, detail=f"Fehler bei der TOP-Extraktion: {str(e)}"
         )
 
     finally:
@@ -445,6 +477,75 @@ async def extract_tops_endpoint(
                 logger.info(f"Cleaned up PDF file: {file_path}")
         except Exception as cleanup_error:
             logger.warning(f"Failed to clean up PDF: {cleanup_error}")
+
+
+@app.post("/api/telemetry/session-complete", response_model=SessionCompleteResponse)
+async def report_session_complete(request: SessionCompleteRequest):
+    """
+    Report session completion and send telemetry data.
+
+    Called by the frontend when the user exports the protocol.
+    Combines transcription metrics (stored in job) with summarization metrics (from frontend).
+    """
+    logger.info(f"Received session complete report for job: {request.job_id}")
+
+    # Get job data
+    job = jobs.get(request.job_id)
+    if not job:
+        logger.warning(f"Job {request.job_id} not found for telemetry")
+        # Still send telemetry with available data
+        collector = TelemetryCollector()
+        collector.set_summarization_metrics(
+            llm_model=request.llm_model,
+            system_prompt=request.system_prompt,
+            top_count=request.top_count,
+            summarization_duration_seconds=request.summarization_duration_seconds,
+            protocol_char_count=request.protocol_char_count,
+        )
+        collector.send()
+        return SessionCompleteResponse(
+            success=True,
+            message="Telemetry sent (job not found, partial data)",
+        )
+
+    # Create telemetry collector and populate with all data
+    collector = TelemetryCollector()
+
+    # Set Whisper config
+    telemetry_data = job.get("telemetry", {})
+    if telemetry_data:
+        collector.set_whisper_config(
+            model=telemetry_data.get("whisper_model", WHISPER_MODEL),
+            batch_size=telemetry_data.get("whisper_batch_size", WHISPER_BATCH_SIZE),
+        )
+
+        # Set transcription metrics
+        collector.set_transcription_metrics(
+            audio_duration_seconds=telemetry_data.get("audio_duration_seconds", 0),
+            transcription_duration_seconds=telemetry_data.get(
+                "transcription_duration_seconds", 0
+            ),
+            transcript_line_count=telemetry_data.get("transcript_line_count", 0),
+            transcript_char_count=telemetry_data.get("transcript_char_count", 0),
+        )
+
+    # Set summarization metrics from frontend
+    collector.set_summarization_metrics(
+        llm_model=request.llm_model,
+        system_prompt=request.system_prompt,
+        top_count=request.top_count,
+        summarization_duration_seconds=request.summarization_duration_seconds,
+        protocol_char_count=request.protocol_char_count,
+    )
+
+    # Send telemetry
+    collector.send()
+
+    logger.info(f"Telemetry sent for job {request.job_id}")
+    return SessionCompleteResponse(
+        success=True,
+        message="Telemetry sent successfully",
+    )
 
 
 # ----- Background Tasks -----
@@ -468,16 +569,38 @@ def run_transcription(job_id: str, file_path: str, models: TranscriptionModels):
             jobs[job_id]["message"] = message
             logger.info(f"[Job {job_id}] Progress: {progress}% - {message}")
 
-        transcript = transcribe_audio(file_path, models, progress_callback)
+        # Time the transcription
+        transcription_start = time.time()
+        result = transcribe_audio(file_path, models, progress_callback)
+        transcription_duration = time.time() - transcription_start
 
-        # Update job with result
+        transcript = result.transcript
+
+        # Calculate transcript metrics
+        transcript_line_count = len(transcript)
+        transcript_char_count = sum(len(line.get("text", "")) for line in transcript)
+
+        # Update job with result and telemetry data
         jobs[job_id]["status"] = "completed"
         jobs[job_id]["progress"] = 100
         jobs[job_id]["message"] = "Transkription abgeschlossen"
         jobs[job_id]["transcript"] = transcript
         # Keep audio_path for streaming playback (will be cleaned up when job expires)
         jobs[job_id]["audio_path"] = file_path
-        logger.info(f"[Job {job_id}] Transcription completed successfully with {len(transcript)} lines")
+
+        # Store telemetry data for later reporting
+        jobs[job_id]["telemetry"] = {
+            "audio_duration_seconds": result.audio_duration_seconds,
+            "transcription_duration_seconds": transcription_duration,
+            "transcript_line_count": transcript_line_count,
+            "transcript_char_count": transcript_char_count,
+            "whisper_model": WHISPER_MODEL,
+            "whisper_batch_size": WHISPER_BATCH_SIZE,
+        }
+
+        logger.info(
+            f"[Job {job_id}] Transcription completed successfully with {transcript_line_count} lines"
+        )
 
     except Exception as e:
         logger.error(f"[Job {job_id}] Transcription failed: {str(e)}", exc_info=True)
@@ -489,6 +612,7 @@ def run_transcription(job_id: str, file_path: str, models: TranscriptionModels):
         try:
             import gc
             import torch
+
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()

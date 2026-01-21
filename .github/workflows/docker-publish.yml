@@ -122,6 +122,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             HF_TOKEN=${{ secrets.HF_TOKEN }}
+            TELEMETRY_WEBHOOK_URL=${{ secrets.TELEMETRY_WEBHOOK_URL }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -180,5 +181,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             HF_TOKEN=${{ secrets.HF_TOKEN }}
+            TELEMETRY_WEBHOOK_URL=${{ secrets.TELEMETRY_WEBHOOK_URL }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

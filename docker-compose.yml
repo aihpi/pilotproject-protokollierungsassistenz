@@ -25,6 +25,7 @@ services:
       - WHISPER_LANGUAGE=${WHISPER_LANGUAGE:-de}
       - LLM_BASE_URL=${LLM_BASE_URL:-http://ollama:11434/v1}
       - LLM_MODEL=${LLM_MODEL:-qwen3:8b}
+      - TELEMETRY_WEBHOOK_URL=${TELEMETRY_WEBHOOK_URL:-}
     volumes:
       - ./uploads:/app/uploads
     healthcheck:

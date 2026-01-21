@@ -81,13 +81,21 @@ export interface SummarizeOptions {
 }
 
 /**
+ * Result from summary generation including timing.
+ */
+export interface SummarizeResult {
+  summary: string;
+  durationSeconds: number;
+}
+
+/**
  * Generate a summary for a TOP segment.
  */
 export async function generateSummary(
   topTitle: string,
   lines: TranscriptLine[],
   options?: SummarizeOptions
-): Promise<string> {
+): Promise<SummarizeResult> {
   const response = await fetch(`${API_BASE}/api/summarize`, {
     method: "POST",
     headers: {
@@ -107,7 +115,10 @@ export async function generateSummary(
   }
 
   const data = await response.json();
-  return data.summary;
+  return {
+    summary: data.summary,
+    durationSeconds: data.duration_seconds,
+  };
 }
 
 /**
@@ -160,5 +171,49 @@ export async function checkBackendHealth(): Promise<boolean> {
     return response.ok;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Session complete telemetry data.
+ */
+export interface SessionCompleteData {
+  jobId: string;
+  topCount: number;
+  protocolCharCount: number;
+  summarizationDurationSeconds: number;
+  llmModel: string;
+  systemPrompt: string;
+}
+
+/**
+ * Report session completion for telemetry.
+ * Called when the user exports the protocol.
+ */
+export async function reportSessionComplete(
+  data: SessionCompleteData
+): Promise<void> {
+  try {
+    const response = await fetch(`${API_BASE}/api/telemetry/session-complete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        job_id: data.jobId,
+        top_count: data.topCount,
+        protocol_char_count: data.protocolCharCount,
+        summarization_duration_seconds: data.summarizationDurationSeconds,
+        llm_model: data.llmModel,
+        system_prompt: data.systemPrompt,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn("Failed to send telemetry:", await response.text());
+    }
+  } catch (error) {
+    // Silently fail - telemetry should not block user workflow
+    console.warn("Failed to send telemetry:", error);
   }
 }

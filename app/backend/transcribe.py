@@ -156,11 +156,18 @@ def _cleanup_memory(device: str) -> None:
         logger.warning(f"Failed to clear GPU cache: {e}")
 
 
+@dataclass
+class TranscriptionResult:
+    """Result from transcription including metrics."""
+    transcript: List[Dict[str, Any]]
+    audio_duration_seconds: float
+
+
 def transcribe_audio(
     file_path: str,
     models: TranscriptionModels,
     progress_callback: Optional[Callable[[int, str], None]] = None,
-) -> List[Dict[str, Any]]:
+) -> TranscriptionResult:
     """
     Transcribe audio file with speaker diarization using WhisperX.
 
@@ -170,7 +177,7 @@ def transcribe_audio(
         progress_callback: Optional callback for progress updates (progress%, message)
 
     Returns:
-        List of dicts with 'speaker', 'text', 'start', and 'end' keys
+        TranscriptionResult with transcript and audio duration
     """
     import whisperx
 
@@ -188,7 +195,8 @@ def transcribe_audio(
         # Load audio
         logger.info(f"Loading audio file: {file_path}")
         audio = whisperx.load_audio(file_path)
-        logger.info(f"Audio loaded, duration: {len(audio)/16000:.1f} seconds")
+        audio_duration_seconds = len(audio) / 16000
+        logger.info(f"Audio loaded, duration: {audio_duration_seconds:.1f} seconds")
 
         if progress_callback:
             progress_callback(15, "Transkription läuft...")
@@ -258,7 +266,10 @@ def transcribe_audio(
                     })
 
         logger.info(f"Transcription finished: {len(transcript)} lines (merged from {raw_segment_count} segments)")
-        return transcript
+        return TranscriptionResult(
+            transcript=transcript,
+            audio_duration_seconds=audio_duration_seconds,
+        )
 
     finally:
         # Explicit memory cleanup
