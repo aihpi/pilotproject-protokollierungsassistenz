@@ -4,13 +4,13 @@
 # Intelligentes Setup-Skript fuer nicht-technische Benutzer
 #
 # Verwendung:
-#   ./setup.sh           # Anwendung starten (Standard)
-#   ./setup.sh stop      # Anwendung stoppen
-#   ./setup.sh status    # Status anzeigen
-#   ./setup.sh restart   # Anwendung neu starten
-#   ./setup.sh logs      # Live-Logs anzeigen
-#   ./setup.sh cleanup   # Alle Daten loeschen und neu starten
-#   ./setup.sh help      # Hilfe anzeigen
+# ./setup.sh           # Anwendung starten (Standard)
+# ./setup.sh stop      # Anwendung stoppen
+# ./setup.sh status    # Status anzeigen
+# ./setup.sh restart   # Anwendung neu starten
+# ./setup.sh logs      # Live-Logs anzeigen
+# ./setup.sh cleanup   # Alle Daten loeschen und neu starten
+# ./setup.sh help      # Hilfe anzeigen
 #
 
 # Exit on error (disabled for interactive sections)
@@ -46,9 +46,9 @@ error() { echo -e "${RED}[FEHLER]${NC} $1"; }
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
-#######################################
+########################################
 # Show help message
-#######################################
+########################################
 show_help() {
     echo ""
     echo -e "${CYAN}=============================================="
@@ -58,24 +58,24 @@ show_help() {
     echo "Verwendung: ./setup.sh [BEFEHL]"
     echo ""
     echo "Befehle:"
-    echo "  (ohne)     Anwendung starten oder fortsetzen"
-    echo "  stop       Anwendung stoppen"
-    echo "  status     Status der Dienste anzeigen"
-    echo "  restart    Anwendung neu starten"
-    echo "  logs       Live-Logs anzeigen (Strg+C zum Beenden)"
-    echo "  cleanup    Alle Daten loeschen und neu starten"
-    echo "  help       Diese Hilfe anzeigen"
+    echo "  (ohne)      Anwendung starten oder fortsetzen"
+    echo "  stop        Anwendung stoppen"
+    echo "  status      Status der Dienste anzeigen"
+    echo "  restart     Anwendung neu starten"
+    echo "  logs        Live-Logs anzeigen (Strg+C zum Beenden)"
+    echo "  cleanup     Alle Daten loeschen und neu starten"
+    echo "  help        Diese Hilfe anzeigen"
     echo ""
     echo "Beispiele:"
-    echo "  ./setup.sh           # Normale Installation/Start"
-    echo "  ./setup.sh status    # Pruefen ob alles laeuft"
-    echo "  ./setup.sh logs      # Fehlersuche mit Logs"
+    echo "  ./setup.sh          # Normale Installation/Start"
+    echo "  ./setup.sh status   # Pruefen ob alles laeuft"
+    echo "  ./setup.sh logs     # Fehlersuche mit Logs"
     echo ""
 }
 
-#######################################
+########################################
 # Check if Docker is installed and running
-#######################################
+########################################
 check_docker() {
     info "Ueberpruefe Docker-Installation..."
 
@@ -103,16 +103,16 @@ check_docker() {
     return 0
 }
 
-#######################################
+########################################
 # Check if a Docker image exists locally
-#######################################
+########################################
 image_exists() {
     docker image inspect "$1" &> /dev/null
 }
 
-#######################################
+########################################
 # Check if Ollama model is downloaded
-#######################################
+########################################
 ollama_model_exists() {
     local volume_name="${SCRIPT_DIR##*/}_ollama_data"
     # Check if volume exists and has data
@@ -127,9 +127,9 @@ ollama_model_exists() {
     return 1
 }
 
-#######################################
+########################################
 # Smart disk space check
-#######################################
+########################################
 check_disk_space() {
     info "Ueberpruefe verfuegbaren Speicherplatz..."
 
@@ -191,9 +191,9 @@ check_disk_space() {
     return 0
 }
 
-#######################################
+########################################
 # Check RAM
-#######################################
+########################################
 check_ram() {
     info "Ueberpruefe verfuegbaren Arbeitsspeicher..."
 
@@ -213,9 +213,9 @@ check_ram() {
     return 0
 }
 
-#######################################
+########################################
 # Check if a port is in use
-#######################################
+########################################
 port_in_use() {
     local port=$1
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -225,9 +225,9 @@ port_in_use() {
     fi
 }
 
-#######################################
+########################################
 # Get process using a port
-#######################################
+########################################
 get_port_process() {
     local port=$1
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -245,9 +245,9 @@ get_port_process() {
     fi
 }
 
-#######################################
+########################################
 # Kill process using a port
-#######################################
+########################################
 kill_port_process() {
     local port=$1
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -268,9 +268,9 @@ kill_port_process() {
     return 1
 }
 
-#######################################
+########################################
 # Check for port conflicts
-#######################################
+########################################
 check_ports() {
     info "Ueberpruefe Port-Verfuegbarkeit..."
 
@@ -333,9 +333,9 @@ check_ports() {
     fi
 }
 
-#######################################
+########################################
 # Check for existing installation
-#######################################
+########################################
 check_existing_installation() {
     # Check if docker compose containers exist
     local containers
@@ -432,9 +432,9 @@ check_existing_installation() {
     return 0
 }
 
-#######################################
+########################################
 # Check for NVIDIA GPU
-#######################################
+########################################
 check_gpu() {
     USE_GPU=false
 
@@ -446,7 +446,9 @@ check_gpu() {
     info "Ueberpruefe NVIDIA GPU..."
 
     if command -v nvidia-smi &> /dev/null; then
-        if nvidia-smi &> /dev/null; then
+        local nvidia_output
+        nvidia_output=$(nvidia-smi 2>&1)
+        if [ $? -eq 0 ]; then
             success "NVIDIA GPU erkannt!"
             echo ""
             echo "GPU-Modus bietet deutlich schnellere Transkription."
@@ -465,15 +467,24 @@ check_gpu() {
                     echo "  Fahre mit CPU-Modus fort..."
                 fi
             fi
+        else
+            warn "nvidia-smi gefunden, aber fehlgeschlagen:"
+            echo "  $nvidia_output" | head -3
+            echo ""
+            echo "  Moegliche Ursachen:"
+            echo "  - Treiber-/Kernel-Version Mismatch (Neustart erforderlich)"
+            echo "  - NVIDIA-Treiber nicht korrekt installiert"
+            echo ""
+            info "Fahre mit CPU-Modus fort..."
         fi
     else
         info "Keine NVIDIA GPU erkannt, verwende CPU-Modus"
     fi
 }
 
-#######################################
+########################################
 # Wait for services to be ready
-#######################################
+########################################
 wait_for_services() {
     echo ""
     info "Warte auf Dienste..."
@@ -512,9 +523,9 @@ wait_for_services() {
     return 0
 }
 
-#######################################
+########################################
 # Show failure diagnostics
-#######################################
+########################################
 show_failure_diagnostics() {
     echo -e "${YELLOW}========== Fehlerdiagnose ==========${NC}"
     echo ""
@@ -539,14 +550,14 @@ show_failure_diagnostics() {
     echo "   -> Empfohlen: Mindestens 8GB RAM, 4 CPUs"
     echo ""
     echo "Naechste Schritte:"
-    echo "  1. ./setup.sh logs      # Detaillierte Logs anzeigen"
-    echo "  2. ./setup.sh cleanup   # Alles loeschen und neu starten"
+    echo "  1. ./setup.sh logs     # Detaillierte Logs anzeigen"
+    echo "  2. ./setup.sh cleanup  # Alles loeschen und neu starten"
     echo ""
 }
 
-#######################################
+########################################
 # Show success message
-#######################################
+########################################
 show_success_message() {
     echo ""
     echo -e "${CYAN}=============================================="
@@ -563,9 +574,9 @@ show_success_message() {
     echo ""
 }
 
-#######################################
+########################################
 # Open browser
-#######################################
+########################################
 open_browser() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
         open "http://localhost:${PORT_FRONTEND}" 2>/dev/null || true
@@ -574,9 +585,9 @@ open_browser() {
     fi
 }
 
-#######################################
+########################################
 # Start the application
-#######################################
+########################################
 do_start() {
     echo ""
     echo -e "${CYAN}=============================================="
@@ -615,9 +626,9 @@ do_start() {
     wait_for_services
 }
 
-#######################################
+########################################
 # Stop the application
-#######################################
+########################################
 do_stop() {
     echo ""
     info "Stoppe die Anwendung..."
@@ -626,9 +637,9 @@ do_stop() {
     echo ""
 }
 
-#######################################
+########################################
 # Show status
-#######################################
+########################################
 do_status() {
     echo ""
     echo -e "${CYAN}=============================================="
@@ -672,9 +683,9 @@ do_status() {
     echo ""
 }
 
-#######################################
+########################################
 # Restart the application
-#######################################
+########################################
 do_restart() {
     echo ""
     info "Starte die Anwendung neu..."
@@ -687,9 +698,9 @@ do_restart() {
     do_status
 }
 
-#######################################
+########################################
 # Show logs
-#######################################
+########################################
 do_logs() {
     echo ""
     info "Zeige Live-Logs (Strg+C zum Beenden)..."
@@ -697,9 +708,9 @@ do_logs() {
     docker compose logs -f
 }
 
-#######################################
+########################################
 # Cleanup everything
-#######################################
+########################################
 do_cleanup() {
     echo ""
     warn "ACHTUNG: Dies loescht alle Anwendungsdaten!"
@@ -730,9 +741,9 @@ do_cleanup() {
     fi
 }
 
-#######################################
+########################################
 # Main entry point
-#######################################
+########################################
 main() {
     local command="${1:-start}"
 
