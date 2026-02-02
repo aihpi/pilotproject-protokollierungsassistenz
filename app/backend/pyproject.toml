@@ -12,4 +12,6 @@ dependencies = [
     "torchaudio>=2.7.0,<2.8.0",
     "whisperx>=3.7.0",
     "pdfplumber>=0.10.0",
+    # Pin huggingface_hub to <1.0 until whisperx/pyannote update to use 'token' instead of 'use_auth_token'
+    "huggingface_hub>=0.24.0,<1.0",    
 ]

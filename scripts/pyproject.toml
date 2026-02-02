@@ -12,6 +12,4 @@ dependencies = [
     "sentence-transformers>=5.1.1",
     "torch>=2.9.0",
     "transformers>=4.57.1",
-    # Pin huggingface_hub to <1.0 until whisperx/pyannote update to use 'token' instead of 'use_auth_token'
-    "huggingface_hub>=0.24.0,<1.0",
 ]
