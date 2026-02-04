@@ -42,6 +42,14 @@ export default function App() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
 
+  // Helper to apply speaker name mappings to transcript lines for summarization
+  const applySpeakerNames = (lines: TranscriptLine[]): TranscriptLine[] => {
+    return lines.map(line => ({
+      ...line,
+      speaker: speakerNames[line.speaker]?.trim() || line.speaker,
+    }));
+  };
+
   // Telemetry state
   const [jobId, setJobId] = useState<string | null>(null);
 
@@ -155,7 +163,7 @@ export default function App() {
 
         try {
           console.log(`[Summary] Generating summary for TOP ${index + 1}...`);
-          const result = await generateSummary(validTops[index]!, topLines, {
+          const result = await generateSummary(validTops[index]!, applySpeakerNames(topLines), {
             model: llmSettings.model,
             systemPrompt: llmSettings.systemPrompt,
           });
@@ -213,7 +221,7 @@ export default function App() {
     const topLines = transcript.filter((_, i) => assignments[i] === topIndex);
 
     try {
-      const result = await generateSummary(validTops[topIndex]!, topLines, {
+      const result = await generateSummary(validTops[topIndex]!, applySpeakerNames(topLines), {
         model: llmSettings.model,
         systemPrompt: llmSettings.systemPrompt,
       });
