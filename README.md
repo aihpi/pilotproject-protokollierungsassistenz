@@ -120,12 +120,13 @@ If you restart your computer, you need to start the application again:
 Wenn Sie Ihren Computer neu starten, müssen Sie die Anwendung erneut starten:
 
 1. **Start Docker Desktop** (if not running)
-2. Open Terminal/PowerShell in the application folder
-3. Run:
-   ```bash
-   docker compose up -d
-   ```
-4. Open **http://localhost:3000** in your browser
+2. Run the setup script:
+   - **Windows:** Right-click `setup.ps1` → "Run with PowerShell"
+   - **macOS/Linux:** Open Terminal in the application folder and run `./setup.sh`
+
+The script will check if the application is already running and open your browser automatically.
+
+Das Skript prüft, ob die Anwendung bereits läuft und öffnet automatisch Ihren Browser.
 
 ### Stopping the Application
 
@@ -133,9 +134,16 @@ To stop the application and free up resources:
 
 Um die Anwendung zu stoppen und Ressourcen freizugeben:
 
-```bash
-docker compose down
-```
+- **Windows:** `.\setup.ps1 stop`
+- **macOS/Linux:** `./setup.sh stop`
+
+### Other Commands / Weitere Befehle
+
+| Command | Description |
+|---------|-------------|
+| `./setup.sh status` | Check if services are running / Status der Dienste prüfen |
+| `./setup.sh logs` | View live logs / Live-Logs anzeigen |
+| `./setup.sh restart` | Restart the application / Anwendung neu starten |
 
 ---
 
