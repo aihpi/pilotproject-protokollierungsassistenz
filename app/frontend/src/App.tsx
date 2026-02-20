@@ -1,28 +1,28 @@
-import { useState, useEffect } from 'react';
-import Layout from './components/Layout';
-import StepIndicator from './components/StepIndicator';
-import UploadStep from './components/UploadStep';
-import ProcessingStep from './components/ProcessingStep';
-import AssignmentStep from './components/AssignmentStep';
-import SummaryStep from './components/SummaryStep';
+import { useState, useEffect } from "react";
+import Layout from "./components/Layout";
+import StepIndicator from "./components/StepIndicator";
+import UploadStep from "./components/UploadStep";
+import ProcessingStep from "./components/ProcessingStep";
+import AssignmentStep from "./components/AssignmentStep";
+import SummaryStep from "./components/SummaryStep";
 import LLMSettingsPanel, {
   DEFAULT_LLM_SETTINGS,
   type LLMSettings,
-} from './components/LLMSettingsPanel';
+} from "./components/LLMSettingsPanel";
 import {
   startTranscription as apiStartTranscription,
   pollTranscription,
   generateSummary,
   checkBackendHealth,
   reportSessionComplete,
-} from './api';
-import type { TranscriptLine } from './types';
+} from "./api";
+import type { TranscriptLine } from "./types";
 
 // LocalStorage key for LLM settings
-const LLM_SETTINGS_KEY = 'llm-settings';
+const LLM_SETTINGS_KEY = "llm-settings";
 
 // Implicit TOP title when no TOPs are defined
-const DEFAULT_TOP_TITLE = 'Gesamtes Gespräch';
+const DEFAULT_TOP_TITLE = "Gesamtes Gespräch";
 
 // Generic system prompt for conversations without TOPs
 const GENERIC_SUMMARY_PROMPT = `Du bist ein Experte für die Zusammenfassung von Gesprächen und Audioaufnahmen.
@@ -53,15 +53,17 @@ export default function App() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState(0);
-  const [processingStatus, setProcessingStatus] = useState('');
+  const [processingStatus, setProcessingStatus] = useState("");
   const [processingError, setProcessingError] = useState<string | null>(null);
 
   // Backend status
-  const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
+  const [backendAvailable, setBackendAvailable] = useState<boolean | null>(
+    null
+  );
 
   // Data state
   const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [tops, setTops] = useState<string[]>(['', '', '']);
+  const [tops, setTops] = useState<string[]>(["", "", ""]);
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
   const [assignments, setAssignments] = useState<(number | null)[]>([]);
   const [summaries, setSummaries] = useState<Record<number, string>>({});
@@ -72,7 +74,7 @@ export default function App() {
 
   // Helper to apply speaker name mappings to transcript lines for summarization
   const applySpeakerNames = (lines: TranscriptLine[]): TranscriptLine[] => {
-    return lines.map(line => ({
+    return lines.map((line) => ({
       ...line,
       speaker: speakerNames[line.speaker]?.trim() || line.speaker,
     }));
@@ -91,7 +93,7 @@ export default function App() {
         return JSON.parse(saved);
       }
     } catch (e) {
-      console.error('Failed to load LLM settings from localStorage:', e);
+      console.error("Failed to load LLM settings from localStorage:", e);
     }
     return DEFAULT_LLM_SETTINGS;
   });
@@ -106,7 +108,7 @@ export default function App() {
     try {
       localStorage.setItem(LLM_SETTINGS_KEY, JSON.stringify(llmSettings));
     } catch (e) {
-      console.error('Failed to save LLM settings to localStorage:', e);
+      console.error("Failed to save LLM settings to localStorage:", e);
     }
   }, [llmSettings]);
 
@@ -116,7 +118,7 @@ export default function App() {
 
     setIsProcessing(true);
     setProcessingProgress(0);
-    setProcessingStatus('Audio wird hochgeladen...');
+    setProcessingStatus("Audio wird hochgeladen...");
     setProcessingError(null);
 
     try {
@@ -141,14 +143,14 @@ export default function App() {
 
       // Set audio URL for playback (use relative URL to go through nginx proxy)
       if (completedJob.audio_url) {
-        const baseUrl = import.meta.env.VITE_API_URL || '';
+        const baseUrl = import.meta.env.VITE_API_URL || "";
         setAudioUrl(`${baseUrl}${completedJob.audio_url}`);
       }
 
       setIsProcessing(false);
 
       // Check if TOPs were defined
-      const hasTops = tops.some((t) => t.trim() !== '');
+      const hasTops = tops.some((t) => t.trim() !== "");
       if (hasTops) {
         // Normal flow: go to assignment step
         setSkippedAssignment(false);
@@ -164,7 +166,8 @@ export default function App() {
         generateSummaryForAll(transcriptResult, job.job_id);
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
+      const errorMessage =
+        error instanceof Error ? error.message : "Unbekannter Fehler";
       setProcessingError(errorMessage);
       setProcessingStatus(`Fehler: ${errorMessage}`);
       // Keep processing screen to show error
@@ -172,9 +175,12 @@ export default function App() {
   };
 
   // Generate summary for entire conversation (when no TOPs are defined)
-  const generateSummaryForAll = async (transcriptLines: TranscriptLine[], currentJobId: string) => {
+  const generateSummaryForAll = async (
+    transcriptLines: TranscriptLine[],
+    currentJobId: string
+  ) => {
     setIsGeneratingSummary(true);
-    setSummaries({ 0: 'Zusammenfassung wird generiert...' });
+    setSummaries({ 0: "Zusammenfassung wird generiert..." });
 
     try {
       const result = await generateSummary(
@@ -199,7 +205,8 @@ export default function App() {
         });
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
+      const errorMessage =
+        error instanceof Error ? error.message : "Unbekannter Fehler";
       setSummaries({ 0: `Fehler: ${errorMessage}` });
     } finally {
       setIsGeneratingSummary(false);
@@ -212,9 +219,7 @@ export default function App() {
       startTranscription();
     } else {
       // Show error - backend not available
-      alert(
-        'Backend nicht erreichbar. Bitte starten Sie den Server mit:\n\ncd backend && uv run uvicorn main:app'
-      );
+      alert("Backend nicht erreichbar.");
     }
   };
 
@@ -225,33 +230,44 @@ export default function App() {
     let totalDuration = 0;
 
     // Generate summaries for each TOP with assigned lines
-    const validTops = tops.filter((t) => t.trim() !== '');
+    const validTops = tops.filter((t) => t.trim() !== "");
     const newSummaries: Record<number, string> = {};
 
     console.log(`[Summary] Starting generation for ${validTops.length} TOPs`);
 
     for (let index = 0; index < validTops.length; index++) {
       const topLines = transcript.filter((_, i) => assignments[i] === index);
-      console.log(`[Summary] TOP ${index + 1}: ${topLines.length} lines assigned`);
+      console.log(
+        `[Summary] TOP ${index + 1}: ${topLines.length} lines assigned`
+      );
 
       if (topLines.length > 0) {
         // Set placeholder while generating
-        newSummaries[index] = 'Zusammenfassung wird generiert...';
+        newSummaries[index] = "Zusammenfassung wird generiert...";
         setSummaries({ ...newSummaries });
 
         try {
           console.log(`[Summary] Generating summary for TOP ${index + 1}...`);
-          const result = await generateSummary(validTops[index]!, applySpeakerNames(topLines), {
-            model: llmSettings.model,
-            systemPrompt: llmSettings.systemPrompt,
-          });
-          console.log(`[Summary] TOP ${index + 1} complete, length: ${result.summary.length}, duration: ${result.durationSeconds}s`);
+          const result = await generateSummary(
+            validTops[index]!,
+            applySpeakerNames(topLines),
+            {
+              model: llmSettings.model,
+              systemPrompt: llmSettings.systemPrompt,
+            }
+          );
+          console.log(
+            `[Summary] TOP ${index + 1} complete, length: ${
+              result.summary.length
+            }, duration: ${result.durationSeconds}s`
+          );
           newSummaries[index] = result.summary;
           totalDuration += result.durationSeconds;
           setSummaries({ ...newSummaries });
         } catch (error) {
           console.error(`[Summary] TOP ${index + 1} failed:`, error);
-          const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
+          const errorMessage =
+            error instanceof Error ? error.message : "Unbekannter Fehler";
           newSummaries[index] = `Fehler: ${errorMessage}`;
           setSummaries({ ...newSummaries });
         }
@@ -260,7 +276,9 @@ export default function App() {
       }
     }
 
-    console.log(`[Summary] All TOPs processed, total duration: ${totalDuration}s`);
+    console.log(
+      `[Summary] All TOPs processed, total duration: ${totalDuration}s`
+    );
 
     // Send telemetry after all summaries are generated
     if (jobId) {
@@ -292,7 +310,7 @@ export default function App() {
     if (skippedAssignment) {
       // Go back to upload step, reset auto-created TOP
       setCurrentStep(1);
-      setTops(['', '', '']);
+      setTops(["", "", ""]);
       setTranscript([]);
       setAssignments([]);
       setSummaries({});
@@ -307,18 +325,25 @@ export default function App() {
   const handleRegenerateSummary = async (topIndex: number) => {
     setIsGeneratingSummary(true);
 
-    const validTops = tops.filter((t) => t.trim() !== '');
+    const validTops = tops.filter((t) => t.trim() !== "");
     const topLines = transcript.filter((_, i) => assignments[i] === topIndex);
-    const prompt = skippedAssignment ? GENERIC_SUMMARY_PROMPT : llmSettings.systemPrompt;
+    const prompt = skippedAssignment
+      ? GENERIC_SUMMARY_PROMPT
+      : llmSettings.systemPrompt;
 
     try {
-      const result = await generateSummary(validTops[topIndex]!, applySpeakerNames(topLines), {
-        model: llmSettings.model,
-        systemPrompt: prompt,
-      });
+      const result = await generateSummary(
+        validTops[topIndex]!,
+        applySpeakerNames(topLines),
+        {
+          model: llmSettings.model,
+          systemPrompt: prompt,
+        }
+      );
       setSummaries((prev) => ({ ...prev, [topIndex]: result.summary }));
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
+      const errorMessage =
+        error instanceof Error ? error.message : "Unbekannter Fehler";
       setSummaries((prev) => ({
         ...prev,
         [topIndex]: `Fehler: ${errorMessage}`,
@@ -334,7 +359,7 @@ export default function App() {
   };
 
   // Filter out empty TOPs for display
-  const validTops = tops.filter((t) => t.trim() !== '');
+  const validTops = tops.filter((t) => t.trim() !== "");
 
   return (
     <Layout onSettingsClick={() => setIsSettingsOpen(true)}>
@@ -349,10 +374,7 @@ export default function App() {
       {/* Backend status indicator */}
       {backendAvailable === false && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
-          Backend nicht erreichbar. Starten Sie den Server mit:{' '}
-          <code className="bg-yellow-100 px-1 rounded">
-            cd backend && uv run uvicorn main:app
-          </code>
+          Backend nicht erreichbar.
         </div>
       )}
 
