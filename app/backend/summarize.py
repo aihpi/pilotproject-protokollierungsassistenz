@@ -22,6 +22,7 @@ from dataclasses import dataclass
 # LLM server configuration (Ollama)
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3:8b")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "ollama")
 
 
 from typing import Optional
@@ -96,7 +97,7 @@ def summarize_segment(
 
     client = OpenAI(
         base_url=LLM_BASE_URL,
-        api_key="ollama",  # Ollama doesn't require a real API key
+        api_key=LLM_API_KEY,
     )
 
     # Use provided values or fall back to defaults

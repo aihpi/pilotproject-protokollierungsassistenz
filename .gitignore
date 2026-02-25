@@ -12,3 +12,7 @@ wheels/
 .env
 examples/
 uploads/
+
+# Kubernetes secrets (keep example templates)
+k8s/secrets/*.yaml
+!k8s/secrets/example-secret.yaml

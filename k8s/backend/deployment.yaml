@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tuiv-backend
+  labels:
+    app: tuiv-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tuiv-backend
+  template:
+    metadata:
+      labels:
+        app: tuiv-backend
+    spec:
+      runtimeClassName: nvidia
+      nodeSelector:
+        accelerator: a30
+      containers:
+        - name: backend
+          image: ghcr.io/aihpi/pilotproject-protokollierungsassistenz/backend:gpu-latest
+          ports:
+            - containerPort: 8010
+          envFrom:
+            - configMapRef:
+                name: tuiv-backend-config
+          env:
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tuiv-secret
+                  key: LLM_API_KEY
+                  optional: true
+          resources:
+            limits:
+              nvidia.com/gpu: "1"
+            requests:
+              nvidia.com/gpu: "1"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8010
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8010
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8010
+            periodSeconds: 30
+            timeoutSeconds: 10

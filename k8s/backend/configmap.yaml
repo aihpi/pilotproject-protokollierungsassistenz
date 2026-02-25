@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tuiv-backend-config
+data:
+  WHISPER_MODEL: "large-v2"
+  WHISPER_DEVICE: "cuda"
+  WHISPER_BATCH_SIZE: "16"
+  WHISPER_LANGUAGE: "de"
+  LLM_BASE_URL: "https://api.aisc.hpi.de"
+  LLM_MODEL: "llama-3-3-70b"

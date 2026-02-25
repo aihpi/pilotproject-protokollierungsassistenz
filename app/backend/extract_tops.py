@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 # LLM server configuration (same as summarize.py)
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3:8b")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "ollama")
 
 # Default system prompt for TOP extraction
 DEFAULT_EXTRACTION_PROMPT = """Du bist ein Experte für deutsche Kommunalverwaltung und analysierst Einladungen zu Ausschusssitzungen.
@@ -117,7 +118,7 @@ def extract_tops_from_text(
 
     client = OpenAI(
         base_url=LLM_BASE_URL,
-        api_key="ollama",  # Ollama doesn't require a real API key
+        api_key=LLM_API_KEY,
     )
 
     user_prompt = f"""Extrahiere alle Tagesordnungspunkte aus diesem Einladungsdokument:
