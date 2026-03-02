@@ -442,38 +442,70 @@ function Test-GPU {
 
     Write-Info "Ueberpruefe NVIDIA GPU..."
 
-    $nvidiaSmi = Get-Command nvidia-smi -ErrorAction SilentlyContinue
-    if ($nvidiaSmi) {
-        $null = nvidia-smi 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Success "NVIDIA GPU erkannt!"
-            Write-Host ""
-            Write-Host "GPU-Modus bietet deutlich schnellere Transkription."
-            $response = Read-Host "Moechten Sie den GPU-Modus verwenden? (j/N)"
-
-            if ($response -match "^[Jj]$") {
-                $dockerInfo = docker info 2>&1
-                if ($dockerInfo -match "nvidia") {
-                    $script:USE_GPU = $true
-                    Write-Success "GPU-Modus aktiviert"
-                } else {
-                    Write-Warn "NVIDIA Container Toolkit moeglicherweise nicht konfiguriert"
-                    Write-Host "  Fuer GPU-Modus stellen Sie sicher, dass Docker Desktop GPU-Unterstuetzung hat."
-                    Write-Host "  Siehe: https://docs.docker.com/desktop/gpu/"
-                    Write-Host ""
-                    $continue = Read-Host "GPU-Modus trotzdem versuchen? (j/N)"
-                    if ($continue -match "^[Jj]$") {
-                        $script:USE_GPU = $true
-                    } else {
-                        Write-Host "  Fahre mit CPU-Modus fort..."
-                    }
-                }
-            }
-            return
-        }
+    # Step 1: Detect NVIDIA GPU via Windows device manager (reliable, no nvidia-smi needed)
+    $nvidiaGPU = $null
+    $nvidiaGPU = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "NVIDIA" } | Select-Object -First 1
+    if (-not $nvidiaGPU) {
+        $nvidiaGPU = Get-WmiObject Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "NVIDIA" } | Select-Object -First 1
     }
 
-    Write-Info "Keine NVIDIA GPU erkannt, verwende CPU-Modus"
+    if (-not $nvidiaGPU) {
+        Write-Info "Keine NVIDIA GPU im System gefunden, verwende CPU-Modus"
+        return
+    }
+
+    Write-Success "NVIDIA GPU erkannt: $($nvidiaGPU.Name)"
+
+    # Step 2: Verify NVIDIA driver works via nvidia-smi
+    $nvidiaSmiCmd = Get-Command nvidia-smi -ErrorAction SilentlyContinue
+    if ($nvidiaSmiCmd) {
+        Write-Host "  Pruefe NVIDIA-Treiber ($($nvidiaSmiCmd.Source))..."
+        $tempOut = Join-Path $env:TEMP "nvsmi_out.txt"
+        $tempErr = Join-Path $env:TEMP "nvsmi_err.txt"
+        try {
+            $proc = Start-Process -FilePath $nvidiaSmiCmd.Source -NoNewWindow -Wait -PassThru -RedirectStandardOutput $tempOut -RedirectStandardError $tempErr
+            if ($proc.ExitCode -ne 0) {
+                $errMsg = ""
+                if (Test-Path $tempErr) { $errMsg = (Get-Content $tempErr -Raw -ErrorAction SilentlyContinue).Trim() }
+                Write-Warn "nvidia-smi fehlgeschlagen (Exit-Code: $($proc.ExitCode))"
+                if ($errMsg) { Write-Host "  $errMsg" }
+                Write-Host "  Treiber-Update empfohlen: https://www.nvidia.com/Download/index.aspx"
+            } else {
+                Write-Success "NVIDIA-Treiber OK"
+            }
+        } catch {
+            Write-Warn "nvidia-smi konnte nicht ausgefuehrt werden: $($_.Exception.Message)"
+        } finally {
+            Remove-Item $tempOut -ErrorAction SilentlyContinue
+            Remove-Item $tempErr -ErrorAction SilentlyContinue
+        }
+    } else {
+        Write-Warn "nvidia-smi nicht gefunden - Treiberstatus konnte nicht geprueft werden"
+    }
+
+    # Step 3: Ask user about GPU mode
+    Write-Host ""
+    Write-Host "GPU-Modus bietet deutlich schnellere Transkription."
+    $response = Read-Host "Moechten Sie den GPU-Modus verwenden? (j/N)"
+
+    if ($response -match "^[Jj]$") {
+        $dockerInfo = docker info 2>&1
+        if ($dockerInfo -match "nvidia") {
+            $script:USE_GPU = $true
+            Write-Success "GPU-Modus aktiviert"
+        } else {
+            Write-Warn "NVIDIA Container Toolkit moeglicherweise nicht konfiguriert"
+            Write-Host "  Fuer GPU-Modus stellen Sie sicher, dass Docker Desktop GPU-Unterstuetzung hat."
+            Write-Host "  Siehe: https://docs.docker.com/desktop/gpu/"
+            Write-Host ""
+            $continue = Read-Host "GPU-Modus trotzdem versuchen? (j/N)"
+            if ($continue -match "^[Jj]$") {
+                $script:USE_GPU = $true
+            } else {
+                Write-Host "  Fahre mit CPU-Modus fort..."
+            }
+        }
+    }
 }
 
 #######################################
