@@ -444,7 +444,7 @@ function Test-GPU {
 
     $nvidiaSmi = Get-Command nvidia-smi -ErrorAction SilentlyContinue
     if ($nvidiaSmi) {
-        nvidia-smi 2>$null | Out-Null
+        $null = nvidia-smi 2>$null
         if ($LASTEXITCODE -eq 0) {
             Write-Success "NVIDIA GPU erkannt!"
             Write-Host ""
