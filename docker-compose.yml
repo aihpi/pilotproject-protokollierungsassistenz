@@ -46,7 +46,7 @@ services:
       - ./scripts/ollama-entrypoint.sh:/ollama-entrypoint.sh:ro
     environment:
       - OLLAMA_MODEL=${LLM_MODEL:-qwen3:8b}
-    entrypoint: ["/bin/bash", "/ollama-entrypoint.sh"]
+    entrypoint: ["/bin/bash", "-c", "sed 's/\\r$//' /ollama-entrypoint.sh > /tmp/entrypoint.sh && /bin/bash /tmp/entrypoint.sh"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 10s
