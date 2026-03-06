@@ -186,3 +186,28 @@ jobs:
             TELEMETRY_WEBHOOK_URL=${{ secrets.TELEMETRY_WEBHOOK_URL }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    needs: [build-frontend, build-backend-gpu]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Restart deployments
+        run: |
+          kubectl rollout restart deployment/tops-backend -n tops
+          kubectl rollout restart deployment/tops-frontend -n tops
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/tops-frontend -n tops --timeout=120s
+          kubectl rollout status deployment/tops-backend -n tops --timeout=600s
