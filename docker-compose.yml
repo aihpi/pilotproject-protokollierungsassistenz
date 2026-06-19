@@ -2,6 +2,11 @@
 # Uses pre-built images from GitHub Container Registry (ghcr.io)
 # No HuggingFace token required - models are pre-bundled in the images!
 #
+# By default the stack is fully self-hosted: summarization runs on the local
+# Ollama service below. To use a remote OpenAI-compatible endpoint instead
+# (e.g. the HPI AISC model hub) set LLM_BASE_URL / LLM_MODEL / LLM_API_KEY in
+# .env - see .env.example. The ollama service then simply goes unused.
+#
 # Usage: docker compose up -d
 # GPU mode: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 
@@ -25,6 +30,7 @@ services:
       - WHISPER_LANGUAGE=${WHISPER_LANGUAGE:-de}
       - LLM_BASE_URL=${LLM_BASE_URL:-http://ollama:11434/v1}
       - LLM_MODEL=${LLM_MODEL:-qwen3:8b}
+      - LLM_API_KEY=${LLM_API_KEY:-ollama}
     volumes:
       - ./uploads:/app/uploads
     healthcheck:
