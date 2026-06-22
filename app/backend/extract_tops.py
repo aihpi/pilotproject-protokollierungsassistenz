@@ -14,35 +14,14 @@ import os
 import re
 from typing import Optional
 
+from llm_config import load_prompt
+
 logger = logging.getLogger(__name__)
 
 # LLM server configuration (same as summarize.py)
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3:8b")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "ollama")
-
-# Default system prompt for TOP extraction
-DEFAULT_EXTRACTION_PROMPT = """Du bist ein Experte für deutsche Kommunalverwaltung und analysierst Einladungen zu Ausschusssitzungen.
-
-Deine Aufgabe ist es, alle Tagesordnungspunkte (TOPs) aus dem Dokument zu extrahieren.
-
-REGELN:
-- Extrahiere ALLE TOPs aus öffentlichen und nichtöffentlichen Teilen
-- Behalte die ursprüngliche Nummerierung bei (1., 2., 2.1., 2.2., etc.)
-- Gib NUR den TOP-Titel zurück, ohne Zusatzinfos wie:
-  - "Beschlussvorlage: XXX"
-  - "Antrag: XXX"
-  - "Drucksache: XXX"
-- Entferne Unterpunkte mit Aufzählungszeichen (●, •, -) - diese sind keine eigenständigen TOPs
-- Jeder TOP kommt auf eine eigene Zeile
-
-FORMAT DER AUSGABE:
-1. [Erster TOP-Titel]
-2. [Zweiter TOP-Titel]
-2.1. [Unter-TOP falls vorhanden]
-...
-
-Gib NUR die nummerierte Liste zurück, keine Erklärungen oder Einleitungen."""
 
 
 def extract_text_from_pdf(pdf_path: str) -> str:
@@ -77,7 +56,9 @@ def extract_text_from_pdf(pdf_path: str) -> str:
                     logger.debug(f"Page {i + 1}: extracted {len(page_text)} characters")
 
         full_text = "\n\n".join(text_parts)
-        logger.info(f"Total extracted text: {len(full_text)} characters from {len(text_parts)} pages")
+        logger.info(
+            f"Total extracted text: {len(full_text)} characters from {len(text_parts)} pages"
+        )
         return full_text
 
     except Exception as e:
@@ -96,7 +77,7 @@ def extract_tops_from_text(
     Args:
         pdf_text: Full text extracted from the PDF
         model: LLM model to use (default: from env or qwen3:8b)
-        system_prompt: Custom system prompt (default: DEFAULT_EXTRACTION_PROMPT)
+        system_prompt: Custom system prompt (default: prompt_extraction.txt)
 
     Returns:
         List of TOP titles (including numbering)
@@ -112,7 +93,7 @@ def extract_tops_from_text(
         )
 
     actual_model = model or LLM_MODEL
-    actual_system_prompt = system_prompt or DEFAULT_EXTRACTION_PROMPT
+    actual_system_prompt = system_prompt or load_prompt("prompt_extraction.txt")
 
     logger.info(f"Extracting TOPs using model: {actual_model}")
 
@@ -191,7 +172,7 @@ def parse_tops_response(response_text: str) -> list[str]:
         match = numbering_pattern.match(line)
         if match:
             # Extract the title after the numbering
-            title = line[match.end():].strip()
+            title = line[match.end() :].strip()
             if title:
                 tops.append(title)
         elif line and not line.startswith(("●", "•", "-", "*", "–")):

@@ -87,6 +87,7 @@ export default function UploadStep({
 
     try {
       const extractedTops = await extractTOPsFromPDF(file, {
+        configId: llmSettings?.configId,
         model: llmSettings?.model,
       });
 
