@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
+import type { LLMConfigPublic } from '../types';
 
 export interface LLMSettings {
+  configId: string;
   model: string;
   systemPrompt: string;
 }
@@ -10,39 +12,14 @@ interface LLMSettingsPanelProps {
   onClose: () => void;
   settings: LLMSettings;
   onSettingsChange: (settings: LLMSettings) => void;
+  configs: LLMConfigPublic[];
 }
 
-export const DEFAULT_SYSTEM_PROMPT = `Du bist ein Experte für die Erstellung von Sitzungsprotokollen für deutsche Kommunalverwaltungen.
-
-Deine Aufgabe ist es, aus einem Transkript eines Tagesordnungspunktes (TOP) eine Zusammenfassung im Stil einer offiziellen Niederschrift zu erstellen.
-
-STIL:
-- Formale Verwaltungssprache, dritte Person
-- Beispiel: "Die Vorsitzende erläuterte den Sachverhalt.", "Herr Müller wies auf die Kostenfrage hin."
-- Paraphrasieren statt wörtlich zitieren
-
-INHALT:
-- Wesentliche Diskussionspunkte und Argumente
-- Getroffene Beschlüsse mit Abstimmungsergebnis (z.B. "einstimmig beschlossen", "mit 5:2 Stimmen angenommen")
-- Wichtige Positionen der Teilnehmer
-- Vereinbarte Maßnahmen oder nächste Schritte
-
-IGNORIEREN:
-- Verfahrensdetails (Mikrofon, Redezeit, Begrüßungen)
-- Füllwörter, Versprecher, triviale Zwischenbemerkungen
-- Technische Störungen
-
-FORMAT:
-- Kurze TOPs (< 10 Äußerungen): 1-2 Absätze
-- Mittlere TOPs (10-50 Äußerungen): 2-3 Absätze
-- Lange TOPs (> 50 Äußerungen): 3-5 Absätze
-- Chronologischer Ablauf
-- Direkt mit Inhalt beginnen, keine Einleitung
-- NUR Fließtext, KEINE Markdown-Formatierung (keine **, keine #)`;
-
 export const DEFAULT_LLM_SETTINGS: LLMSettings = {
+  configId: 'standard',
   model: '',
-  systemPrompt: DEFAULT_SYSTEM_PROMPT,
+  // Seeded from the selected configuration's prompt once /api/llm-configs loads.
+  systemPrompt: '',
 };
 
 export default function LLMSettingsPanel({
@@ -50,6 +27,7 @@ export default function LLMSettingsPanel({
   onClose,
   settings,
   onSettingsChange,
+  configs,
 }: LLMSettingsPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -80,12 +58,32 @@ export default function LLMSettingsPanel({
     }
   }, [isOpen, onClose]);
 
+  const selectedConfig = configs.find((c) => c.id === settings.configId);
+  const promptEditable = selectedConfig?.prompt_editable ?? true;
+  // Editable configs show the user's (possibly customised) prompt; locked
+  // configs show their fixed prompt read-only.
+  const displayedPrompt = promptEditable
+    ? settings.systemPrompt
+    : selectedConfig?.system_prompt ?? '';
+
+  const handleConfigChange = (configId: string) => {
+    const cfg = configs.find((c) => c.id === configId);
+    onSettingsChange({
+      ...settings,
+      configId,
+      model: cfg?.model ?? settings.model,
+    });
+  };
+
   const handlePromptChange = (systemPrompt: string) => {
     onSettingsChange({ ...settings, systemPrompt });
   };
 
   const handleResetPrompt = () => {
-    onSettingsChange({ ...settings, systemPrompt: DEFAULT_SYSTEM_PROMPT });
+    onSettingsChange({
+      ...settings,
+      systemPrompt: selectedConfig?.system_prompt ?? '',
+    });
   };
 
   if (!isOpen) return null;
@@ -116,32 +114,72 @@ export default function LLMSettingsPanel({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Model configuration */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Modellkonfiguration
+            </label>
+            <select
+              value={settings.configId}
+              onChange={(e) => handleConfigChange(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+            >
+              {configs.length === 0 ? (
+                <option value={settings.configId}>{settings.configId}</option>
+              ) : (
+                configs.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label} ({c.model})
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
           {/* System Prompt */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <label className="block text-sm font-medium text-gray-700">
                 System-Prompt
               </label>
-              <button
-                onClick={handleResetPrompt}
-                className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Standard
-              </button>
+              {promptEditable && (
+                <button
+                  onClick={handleResetPrompt}
+                  className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Standard
+                </button>
+              )}
             </div>
             <textarea
-              value={settings.systemPrompt}
+              value={displayedPrompt}
               onChange={(e) => handlePromptChange(e.target.value)}
+              disabled={!promptEditable}
               rows={16}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+              className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none ${
+                promptEditable ? '' : 'bg-gray-100 text-gray-500 cursor-not-allowed'
+              }`}
               placeholder="System-Prompt eingeben..."
             />
-            <p className="mt-2 text-xs text-gray-500">
-              Der System-Prompt definiert, wie die KI die Zusammenfassungen erstellt.
-            </p>
+            {promptEditable ? (
+              <>
+                <p className="mt-2 text-xs text-gray-500">
+                  Der System-Prompt definiert, wie die KI die Zusammenfassungen erstellt.
+                </p>
+                <p className="mt-1 text-xs text-amber-600">
+                  Hinweis: Eine Änderung des Prompts kann die Qualität verringern, wenn das
+                  Modell auf den Standard-Prompt abgestimmt ist.
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-xs text-amber-600">
+                Dieser Prompt ist auf das trainierte Modell abgestimmt und kann nicht
+                geändert werden.
+              </p>
+            )}
           </div>
         </div>
 

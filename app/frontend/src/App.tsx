@@ -15,38 +15,15 @@ import {
   generateSummary,
   checkBackendHealth,
   reportSessionComplete,
+  getLLMConfigs,
 } from "./api";
-import type { TranscriptLine } from "./types";
+import type { TranscriptLine, LLMConfigPublic } from "./types";
 
 // LocalStorage key for LLM settings
 const LLM_SETTINGS_KEY = "llm-settings";
 
 // Implicit TOP title when no TOPs are defined
 const DEFAULT_TOP_TITLE = "Gesamtes Gespräch";
-
-// Generic system prompt for conversations without TOPs
-const GENERIC_SUMMARY_PROMPT = `Du bist ein Experte für die Zusammenfassung von Gesprächen und Audioaufnahmen.
-
-Deine Aufgabe ist es, aus einem Transkript eine klare und strukturierte Zusammenfassung zu erstellen.
-
-STIL:
-- Sachlich und gut lesbar
-- Dritte Person
-- Paraphrasieren statt wörtlich zitieren
-
-INHALT:
-- Wesentliche Themen und Diskussionspunkte
-- Wichtige Aussagen und Positionen der Teilnehmer
-- Getroffene Entscheidungen oder Vereinbarungen
-- Offene Punkte oder nächste Schritte
-
-FORMAT:
-- Kurze Gespräche (< 10 Äußerungen): 1-2 Absätze
-- Mittlere Gespräche (10-50 Äußerungen): 2-3 Absätze
-- Lange Gespräche (> 50 Äußerungen): 3-5 Absätze
-- Direkt mit Inhalt beginnen, keine Einleitung
-- NUR Fließtext, KEINE Markdown-Formatierung (keine **, keine #)
-`;
 
 export default function App() {
   // Current step in wizard
@@ -90,7 +67,8 @@ export default function App() {
     try {
       const saved = localStorage.getItem(LLM_SETTINGS_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        // Merge over defaults so older entries gain new fields (e.g. configId)
+        return { ...DEFAULT_LLM_SETTINGS, ...JSON.parse(saved) };
       }
     } catch (e) {
       console.error("Failed to load LLM settings from localStorage:", e);
@@ -98,9 +76,33 @@ export default function App() {
     return DEFAULT_LLM_SETTINGS;
   });
 
+  // Available model configurations, fetched from the backend
+  const [llmConfigs, setLlmConfigs] = useState<LLMConfigPublic[]>([]);
+  // System prompt used for the no-TOP "whole conversation" path
+  const [genericPrompt, setGenericPrompt] = useState<string>("");
+
   // Check backend availability on mount
   useEffect(() => {
     checkBackendHealth().then(setBackendAvailable);
+  }, []);
+
+  // Load model configurations on mount and seed the prompt/model if unset
+  useEffect(() => {
+    getLLMConfigs()
+      .then((data) => {
+        setLlmConfigs(data.configs);
+        setGenericPrompt(data.generic_prompt);
+        setLlmSettings((prev) => {
+          const active = data.configs.find((c) => c.id === prev.configId);
+          const editable = data.configs.find((c) => c.id === data.default_id);
+          return {
+            ...prev,
+            model: prev.model || active?.model || "",
+            systemPrompt: prev.systemPrompt || editable?.system_prompt || "",
+          };
+        });
+      })
+      .catch((e) => console.error("Failed to load LLM configs:", e));
   }, []);
 
   // Save LLM settings to localStorage when they change
@@ -187,8 +189,9 @@ export default function App() {
         DEFAULT_TOP_TITLE,
         applySpeakerNames(transcriptLines),
         {
+          configId: llmSettings.configId,
           model: llmSettings.model,
-          systemPrompt: GENERIC_SUMMARY_PROMPT,
+          systemPrompt: genericPrompt,
         }
       );
       setSummaries({ 0: result.summary });
@@ -201,7 +204,8 @@ export default function App() {
           protocolCharCount: result.summary.length,
           summarizationDurationSeconds: result.durationSeconds,
           llmModel: llmSettings.model,
-          systemPrompt: GENERIC_SUMMARY_PROMPT,
+          systemPrompt: genericPrompt,
+          configId: llmSettings.configId,
         });
       }
     } catch (error) {
@@ -252,6 +256,7 @@ export default function App() {
             validTops[index]!,
             applySpeakerNames(topLines),
             {
+              configId: llmSettings.configId,
               model: llmSettings.model,
               systemPrompt: llmSettings.systemPrompt,
             }
@@ -293,6 +298,7 @@ export default function App() {
         summarizationDurationSeconds: totalDuration,
         llmModel: llmSettings.model,
         systemPrompt: llmSettings.systemPrompt,
+        configId: llmSettings.configId,
       });
       console.log(`[Summary] Telemetry sent`);
     }
@@ -327,15 +333,14 @@ export default function App() {
 
     const validTops = tops.filter((t) => t.trim() !== "");
     const topLines = transcript.filter((_, i) => assignments[i] === topIndex);
-    const prompt = skippedAssignment
-      ? GENERIC_SUMMARY_PROMPT
-      : llmSettings.systemPrompt;
+    const prompt = skippedAssignment ? genericPrompt : llmSettings.systemPrompt;
 
     try {
       const result = await generateSummary(
         validTops[topIndex]!,
         applySpeakerNames(topLines),
         {
+          configId: llmSettings.configId,
           model: llmSettings.model,
           systemPrompt: prompt,
         }
@@ -369,6 +374,7 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         settings={llmSettings}
         onSettingsChange={setLlmSettings}
+        configs={llmConfigs}
       />
 
       {/* Backend status indicator */}
