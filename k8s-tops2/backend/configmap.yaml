@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tops2-backend-config
+data:
+  WHISPER_MODEL: "large-v2"
+  WHISPER_DEVICE: "cuda"
+  WHISPER_BATCH_SIZE: "16"
+  WHISPER_LANGUAGE: "de"
+  LLM_BASE_URL: "https://api.aisc.hpi.de"
+  # Base model used by extract_tops (PDF agenda extraction) and the "standard" config.
+  LLM_MODEL: "gemma-4-31b"
+  # Fine-tuned LoRA adapter used by the "gemma" config for summarisation.
+  GEMMA_MODEL: "gemma-4-31b-protokoll"
+  # tops2 defaults to the gemma + LoRA configuration.
+  LLM_DEFAULT_CONFIG: "gemma"
