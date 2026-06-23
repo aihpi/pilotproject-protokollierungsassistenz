@@ -454,8 +454,19 @@ async def generate_summary(request: SummarizeRequest):
     if not request.lines:
         raise HTTPException(status_code=400, detail="Keine Zeilen zum Zusammenfassen")
 
-    # Combine lines into text
-    text = "\n".join([f"{line.speaker}: {line.text}" for line in request.lines])
+    # Combine lines into "Name: utterance" text, merging consecutive turns from the
+    # same speaker into one space-joined line. This mirrors the transcription merge
+    # (transcribe.py) and the adapter's training input (pilotproject-automatic-protocols
+    # render_transcript_text), so the gemma config receives its trained prompt shape
+    # even after the frontend re-labels speakers (which can make adjacent lines share a
+    # speaker).
+    merged: list[list[str]] = []
+    for line in request.lines:
+        if merged and merged[-1][0] == line.speaker:
+            merged[-1][1] += " " + line.text
+        else:
+            merged.append([line.speaker, line.text])
+    text = "\n".join(f"{spk}: {txt}" if spk else txt for spk, txt in merged)
 
     # Resolve the selected configuration -> model + system prompt.
     try:
