@@ -61,7 +61,7 @@ _CONFIGS: dict[str, LLMConfig] = {
     # is served, otherwise inference will not match the trained prompt.
     "gemma": LLMConfig(
         id="gemma",
-        label="Gemma",
+        label="Landtagstil",
         model=GEMMA_MODEL,
         prompt_file="prompt_gemma.txt",
         prompt_editable=False,
