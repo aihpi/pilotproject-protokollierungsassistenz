@@ -20,6 +20,7 @@ RUN pip install uv
 # Copy project files
 COPY pyproject.toml ./
 COPY *.py ./
+COPY *.txt ./
 
 # Create uploads directory
 RUN mkdir -p uploads
