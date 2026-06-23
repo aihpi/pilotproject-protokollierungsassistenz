@@ -24,22 +24,30 @@ curl -sS https://api.aisc.hpi.de/v1/lora/adapters \
   -H "Authorization: Bearer $LITELLM_KEY" | jq
 #    If gemma-4-31b already has 2 adapters, ask ops to free a slot before uploading.
 
-# 1. Copy the run so the original training output is untouched.
-cp -r ~/pilotproject-automatic-protocols/results/20260622-202658 /tmp/gemma-lora
-cd /tmp/gemma-lora
+# 1. Stage ONLY allowlisted files that actually exist. This run has no
+#    special_tokens_map.json/added_tokens.json (the loop skips them), and its
+#    processor_config.json + chat_template.jinja are NOT in the lora-manager
+#    allowlist, so they must be excluded (including them => upload rejected).
+#    Listing a missing file in `tar` directly is what fails with
+#    "tar: special_tokens_map.json: Cannot stat: No such file or directory".
+SRC=~/pilotproject-automatic-protocols/results/20260622-202658
+STAGE=/tmp/gemma-lora-stage
+rm -rf "$STAGE"; mkdir -p "$STAGE"
+for f in adapter_config.json adapter_model.safetensors \
+         tokenizer.json tokenizer_config.json \
+         special_tokens_map.json added_tokens.json; do
+  [ -e "$SRC/$f" ] && cp "$SRC/$f" "$STAGE/"
+done
 
-# 2. Make the recorded base match the hub's full base (this run records the unsloth
-#    4-bit base; the hub serves google/gemma-4-31B-it). Standard QLoRA-serve fix.
-sed -i 's#"base_model_name_or_path": "[^"]*"#"base_model_name_or_path": "google/gemma-4-31B-it"#' adapter_config.json
-grep base_model_name_or_path adapter_config.json   # confirm
+# 2. Patch the recorded base so it matches the hub's full base (this run records the
+#    unsloth 4-bit base; the hub serves google/gemma-4-31B-it). Standard QLoRA-serve fix.
+sed -i 's#"base_model_name_or_path": "[^"]*"#"base_model_name_or_path": "google/gemma-4-31B-it"#' "$STAGE/adapter_config.json"
+grep base_model_name_or_path "$STAGE/adapter_config.json"   # confirm
 
-# 3. Tar the CONTENTS (flat), only allowlisted files. Exclude chat_template.jinja,
-#    *.bin, optimizer/scheduler, checkpoints/, runs/.
-tar czf /tmp/gemma-4-31b-protokoll.tar.gz \
-  adapter_config.json adapter_model.safetensors \
-  tokenizer.json tokenizer_config.json special_tokens_map.json
-tar tzf /tmp/gemma-4-31b-protokoll.tar.gz   # no leading "./", no extra files
-ls -lh /tmp/gemma-4-31b-protokoll.tar.gz    # < 4 GiB (~0.25 GB here)
+# 3. Tar the CONTENTS (flat).
+( cd "$STAGE" && tar czf /tmp/gemma-4-31b-protokoll.tar.gz * )
+tar tzf /tmp/gemma-4-31b-protokoll.tar.gz   # no leading "./", only the staged files
+ls -lh /tmp/gemma-4-31b-protokoll.tar.gz    # < 4 GiB (~871 MB for this r32 run)
 
 # 4. Upload.
 curl -sS -X POST https://api.aisc.hpi.de/v1/lora/upload \
@@ -59,6 +67,20 @@ If step 4 returns `500 vllm load failed` despite the base edit, the QLoRA adapte
 serving cleanly on the fp16 base. Fall back to a full-base run, e.g.
 `~/pilotproject-automatic-protocols/results/20260619-093255` (r16, base
 `google/gemma-4-31B-it`) — skip step 2 for it — and re-upload under the same name.
+
+If step 4 returns `upload failed: Client error '401 Unauthorized' for url
+'http://litellm-service:4000/model/new'`, your key/adapter are fine — lora-manager's
+`LITELLM_MASTER_KEY` is stale (the cluster's `rotate-secrets.sh` restarts `litellm-proxy`
+but not `lora-manager`). Fix from a host with `litellm`-namespace access:
+
+```bash
+kubectl rollout restart deployment/lora-manager -n litellm
+kubectl rollout status deployment/lora-manager -n litellm
+```
+
+Then retry step 4 (the failed upload rolls back cleanly, so no `409`). If you lack access,
+ask the AISC hub / litellm-k8s ops team to restart `lora-manager`, and to add it to
+`rotate-secrets.sh`.
 
 ---
 
