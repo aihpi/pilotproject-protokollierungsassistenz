@@ -9,7 +9,7 @@ data:
   WHISPER_LANGUAGE: "de"
   LLM_BASE_URL: "https://api.aisc.hpi.de"
   # Base model used by extract_tops (PDF agenda extraction) and the "standard" config.
-  LLM_MODEL: "gemma-4-31b"
+  LLM_MODEL: "llama-3-3-70b"
   # Fine-tuned LoRA adapter used by the "gemma" config for summarisation.
   GEMMA_MODEL: "gemma-4-31b-protokoll"
   # tops2 defaults to the gemma + LoRA configuration.
