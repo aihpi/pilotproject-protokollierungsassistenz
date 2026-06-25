@@ -41,6 +41,7 @@ def summarize_segment(
     transcript_text: str,
     model: Optional[str] = None,
     system_prompt: Optional[str] = None,
+    top_index: Optional[int] = None,
 ) -> SummarizationResult:
     """
     Generate a summary for a meeting segment (TOP) using Ollama.
@@ -50,6 +51,10 @@ def summarize_segment(
         transcript_text: Full transcript text for this TOP
         model: LLM model to use (default: from env or qwen3:8b)
         system_prompt: Custom system prompt (default: prompt_llama.txt)
+        top_index: 1-based number of this TOP. Some prompts (e.g. prompt_gemma.txt)
+            format their heading as "## Zu TOP N:" and read N from the "TOP:" field,
+            so the number must be carried into the prompt; numbering is stripped
+            during extraction and can no longer be recovered from the title alone.
 
     Returns:
         SummarizationResult with summary text and duration in seconds
@@ -74,9 +79,13 @@ def summarize_segment(
     actual_model = model or LLM_MODEL
     actual_system_prompt = system_prompt or load_prompt("prompt_llama.txt")
 
+    # Keep the TOP number in the prompt so prompts that build a "## Zu TOP N:"
+    # heading can recover N (extraction strips numbering from the title).
+    top_label = f"TOP {top_index}: {top_title}" if top_index is not None else f"TOP: {top_title}"
+
     user_prompt = f"""Erstelle eine Zusammenfassung für folgenden Tagesordnungspunkt:
 
-TOP: {top_title}
+{top_label}
 
 Transkript:
 {transcript_text}

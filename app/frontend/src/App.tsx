@@ -80,6 +80,10 @@ export default function App() {
   const [llmConfigs, setLlmConfigs] = useState<LLMConfigPublic[]>([]);
   // System prompt used for the no-TOP "whole conversation" path
   const [genericPrompt, setGenericPrompt] = useState<string>("");
+  // Whether the initial /api/llm-configs fetch has settled. Config-dependent
+  // requests (summary, telemetry) must wait for this so they don't go out with
+  // the empty seed values in DEFAULT_LLM_SETTINGS.
+  const [configsReady, setConfigsReady] = useState(false);
 
   // Check backend availability on mount
   useEffect(() => {
@@ -99,15 +103,27 @@ export default function App() {
           const known = data.configs.some((c) => c.id === prev.configId);
           const configId = known ? prev.configId : data.default_id;
           const active = data.configs.find((c) => c.id === configId);
+          // Only keep the stored prompt when the user explicitly edited it for a
+          // config that is still offered and still editable. Otherwise reseed from
+          // the config so backend prompt-file updates reach users and a removed
+          // preset's prompt is never sent under a different config.
+          const keepPrompt =
+            known && prev.promptModified && (active?.prompt_editable ?? false);
           return {
             ...prev,
             configId,
             model: active?.model || prev.model || "",
-            systemPrompt: prev.systemPrompt || active?.system_prompt || "",
+            systemPrompt: keepPrompt
+              ? prev.systemPrompt
+              : active?.system_prompt ?? "",
+            promptModified: keepPrompt ? prev.promptModified : false,
           };
         });
       })
-      .catch((e) => console.error("Failed to load LLM configs:", e));
+      .catch((e) => console.error("Failed to load LLM configs:", e))
+      // Mark hydration as settled either way: on failure the backend still
+      // resolves an empty config_id to its default, so the flow should proceed.
+      .finally(() => setConfigsReady(true));
   }, []);
 
   // Save LLM settings to localStorage when they change
@@ -197,6 +213,7 @@ export default function App() {
           configId: llmSettings.configId,
           model: llmSettings.model,
           systemPrompt: genericPrompt,
+          topIndex: 1,
         }
       );
       setSummaries({ 0: result.summary });
@@ -224,12 +241,19 @@ export default function App() {
 
   // Handle step navigation
   const handleStep1Next = () => {
-    if (backendAvailable) {
-      startTranscription();
-    } else {
+    if (!backendAvailable) {
       // Show error - backend not available
       alert("Backend nicht erreichbar.");
+      return;
     }
+    if (!configsReady) {
+      // Avoid starting a run before the config hydration has settled, which
+      // would let the no-TOP auto-summary and telemetry go out with empty
+      // config/model values.
+      alert("Modellkonfigurationen werden noch geladen. Bitte erneut versuchen.");
+      return;
+    }
+    startTranscription();
   };
 
   const handleStep2Next = async () => {
@@ -264,6 +288,7 @@ export default function App() {
               configId: llmSettings.configId,
               model: llmSettings.model,
               systemPrompt: llmSettings.systemPrompt,
+              topIndex: index + 1,
             }
           );
           console.log(
@@ -348,6 +373,7 @@ export default function App() {
           configId: llmSettings.configId,
           model: llmSettings.model,
           systemPrompt: prompt,
+          topIndex: topIndex + 1,
         }
       );
       setSummaries((prev) => ({ ...prev, [topIndex]: result.summary }));

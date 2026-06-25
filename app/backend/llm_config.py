@@ -70,6 +70,15 @@ _CONFIGS: dict[str, LLMConfig] = {
 
 DEFAULT_CONFIG_ID = os.environ.get("LLM_DEFAULT_CONFIG", "standard")
 
+# Fail fast at import time: /api/llm-configs advertises DEFAULT_CONFIG_ID and
+# get_config(None) dereferences it, so a mis-set LLM_DEFAULT_CONFIG must surface
+# as a startup error rather than a broken default on the first request.
+if DEFAULT_CONFIG_ID not in _CONFIGS:
+    raise RuntimeError(
+        f"Unknown LLM_DEFAULT_CONFIG '{DEFAULT_CONFIG_ID}'. "
+        f"Expected one of: {', '.join(_CONFIGS)}"
+    )
+
 
 def get_config(config_id: Optional[str]) -> LLMConfig:
     """Resolve a config id. Empty/None -> default config; unknown -> KeyError."""

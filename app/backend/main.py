@@ -183,6 +183,7 @@ class TranscriptionJob(BaseModel):
 class SummarizeRequest(BaseModel):
     top_title: str
     lines: List[TranscriptLine]
+    top_index: Optional[int] = None  # 1-based TOP number, kept in the prompt for "## Zu TOP N:"
     config_id: Optional[str] = None  # selected model configuration id
     model: Optional[str] = None  # LLM model to use (e.g., "qwen3:8b")
     system_prompt: Optional[str] = None  # Custom system prompt
@@ -490,6 +491,7 @@ async def generate_summary(request: SummarizeRequest):
             text,
             model=model,
             system_prompt=system_prompt,
+            top_index=request.top_index,
         )
         return SummarizeResponse(
             summary=result.summary,

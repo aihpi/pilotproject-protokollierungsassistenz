@@ -5,6 +5,11 @@ export interface LLMSettings {
   configId: string;
   model: string;
   systemPrompt: string;
+  // True once the user has edited the prompt for the current (editable) config.
+  // Lets hydration keep a user-customised prompt while reseeding an untouched one
+  // from the backend (so prompt-file updates reach users and a removed preset's
+  // prompt is not carried over to another config).
+  promptModified: boolean;
 }
 
 interface LLMSettingsPanelProps {
@@ -21,6 +26,7 @@ export const DEFAULT_LLM_SETTINGS: LLMSettings = {
   model: '',
   // Seeded from the selected configuration's prompt once /api/llm-configs loads.
   systemPrompt: '',
+  promptModified: false,
 };
 
 export default function LLMSettingsPanel({
@@ -76,17 +82,19 @@ export default function LLMSettingsPanel({
       // Load the newly selected preset's prompt instead of carrying over the
       // prompt edited for the previous config.
       systemPrompt: cfg?.system_prompt ?? settings.systemPrompt,
+      promptModified: false,
     });
   };
 
   const handlePromptChange = (systemPrompt: string) => {
-    onSettingsChange({ ...settings, systemPrompt });
+    onSettingsChange({ ...settings, systemPrompt, promptModified: true });
   };
 
   const handleResetPrompt = () => {
     onSettingsChange({
       ...settings,
       systemPrompt: selectedConfig?.system_prompt ?? '',
+      promptModified: false,
     });
   };
 
@@ -161,10 +169,10 @@ export default function LLMSettingsPanel({
             <textarea
               value={displayedPrompt}
               onChange={(e) => handlePromptChange(e.target.value)}
-              disabled={!promptEditable}
+              readOnly={!promptEditable}
               rows={16}
               className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none ${
-                promptEditable ? '' : 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                promptEditable ? '' : 'bg-gray-100 text-gray-500'
               }`}
               placeholder="System-Prompt eingeben..."
             />

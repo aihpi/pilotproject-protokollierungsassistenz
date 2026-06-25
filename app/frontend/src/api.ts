@@ -83,6 +83,9 @@ export interface SummarizeOptions {
   configId?: string;
   model?: string;
   systemPrompt?: string;
+  // 1-based TOP number. Carried into the prompt so configs whose prompt builds a
+  // "## Zu TOP N:" heading (e.g. the Gemma preset) can recover N.
+  topIndex?: number;
 }
 
 /**
@@ -109,6 +112,7 @@ export async function generateSummary(
     body: JSON.stringify({
       top_title: topTitle,
       lines: lines,
+      top_index: options?.topIndex,
       config_id: options?.configId,
       model: options?.model,
       system_prompt: options?.systemPrompt,

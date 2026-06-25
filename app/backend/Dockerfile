@@ -20,7 +20,6 @@ RUN pip install uv
 # Copy project files
 COPY pyproject.toml ./
 COPY *.py ./
-COPY *.txt ./
 
 # Create uploads directory
 RUN mkdir -p uploads
@@ -41,6 +40,11 @@ ENV TORCH_HOME=/app/.cache/torch
 # This eliminates the need for HF_TOKEN at runtime
 # Reuses the load_models() function from transcribe.py
 RUN python -c "from transcribe import load_models; load_models()"
+
+# Prompt text files are runtime-only assets. Copy them after the expensive
+# dependency install and model prefetch so a prompt edit doesn't invalidate
+# those cached layers on rebuild.
+COPY *.txt ./
 
 # Clear the HF_TOKEN from environment (security: don't leak token in final image)
 ENV HF_TOKEN=
