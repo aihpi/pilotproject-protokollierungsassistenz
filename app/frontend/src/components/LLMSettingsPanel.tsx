@@ -16,7 +16,8 @@ interface LLMSettingsPanelProps {
 }
 
 export const DEFAULT_LLM_SETTINGS: LLMSettings = {
-  configId: 'standard',
+  // Seeded from the backend default_id once /api/llm-configs loads.
+  configId: '',
   model: '',
   // Seeded from the selected configuration's prompt once /api/llm-configs loads.
   systemPrompt: '',
@@ -72,6 +73,9 @@ export default function LLMSettingsPanel({
       ...settings,
       configId,
       model: cfg?.model ?? settings.model,
+      // Load the newly selected preset's prompt instead of carrying over the
+      // prompt edited for the previous config.
+      systemPrompt: cfg?.system_prompt ?? settings.systemPrompt,
     });
   };
 
