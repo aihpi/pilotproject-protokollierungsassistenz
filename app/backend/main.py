@@ -454,8 +454,19 @@ async def generate_summary(request: SummarizeRequest):
     if not request.lines:
         raise HTTPException(status_code=400, detail="Keine Zeilen zum Zusammenfassen")
 
-    # Combine lines into text
-    text = "\n".join([f"{line.speaker}: {line.text}" for line in request.lines])
+    # Combine lines into "Name: utterance" text, merging consecutive turns from the
+    # same speaker into one space-joined line. This mirrors the transcription merge
+    # (transcribe.py) and the adapter's training input (pilotproject-automatic-protocols
+    # render_transcript_text), so the gemma config receives its trained prompt shape
+    # even after the frontend re-labels speakers (which can make adjacent lines share a
+    # speaker).
+    merged: list[list[str]] = []
+    for line in request.lines:
+        if merged and merged[-1][0] == line.speaker:
+            merged[-1][1] += " " + line.text
+        else:
+            merged.append([line.speaker, line.text])
+    text = "\n".join(f"{spk}: {txt}" if spk else txt for spk, txt in merged)
 
     # Resolve the selected configuration -> model + system prompt.
     try:
@@ -508,8 +519,11 @@ async def extract_tops_endpoint(
         logger.warning(f"Rejected non-PDF file: {pdf.content_type}")
         raise HTTPException(status_code=400, detail="Nur PDF-Dateien sind erlaubt")
 
-    # Resolve the selected configuration. The extraction prompt is not
-    # user-editable, so only the model is taken from the config.
+    # Resolve the selected configuration. /api/extract-tops always extracts with
+    # prompt_extraction.txt and deliberately ignores the config's summarisation
+    # prompt: the extraction prompt is curated and not user-editable, so only the
+    # model is taken from the config (resolved_prompt stays None for any selected
+    # config; a free-form call without a config_id may still pass its own prompt).
     try:
         cfg = get_config(config_id)
     except KeyError:

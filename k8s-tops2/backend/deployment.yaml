@@ -1,37 +1,37 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: tops-backend
+  name: tops2-backend
   labels:
-    app: tops-backend
+    app: tops2-backend
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: tops-backend
+      app: tops2-backend
   template:
     metadata:
       labels:
-        app: tops-backend
+        app: tops2-backend
     spec:
       runtimeClassName: nvidia
       nodeSelector:
         accelerator: a30
       containers:
         - name: backend
-          image: ghcr.io/aihpi/pilotproject-protokollierungsassistenz/backend:sha-74353f6-gpu
+          image: ghcr.io/aihpi/pilotproject-protokollierungsassistenz/backend:6-llm-config-switching-gpu
+          imagePullPolicy: Always
           ports:
             - containerPort: 8010
           envFrom:
             - configMapRef:
-                name: tops-backend-config
+                name: tops2-backend-config
           env:
             - name: LLM_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: tops-secret
+                  name: tops2-secret
                   key: LLM_API_KEY
-                  optional: true
           resources:
             limits:
               nvidia.com/gpu: "1"

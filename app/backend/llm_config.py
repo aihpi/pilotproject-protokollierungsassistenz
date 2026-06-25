@@ -55,10 +55,10 @@ _CONFIGS: dict[str, LLMConfig] = {
         prompt_file="prompt_llama.txt",
         prompt_editable=True,
     ),
-    # PROVISIONAL: prompt_gemma.txt is a stand-in for the eventual gemma-4-31b-it
-    # + LoRA adapter. Replace it with the final LoRA training prompt from
-    # build_dataset.py (repo pilotproject-automatic-protocols) before the adapter
-    # is served, otherwise inference will not match the trained prompt.
+    # prompt_gemma.txt is pinned to the gemma-4-31b LoRA adapter's training prompt
+    # (single source of truth: scripts/utils/prompt_summarize.txt in
+    # pilotproject-automatic-protocols; stripped sha256 46aa5c0b0587). Keep the two in
+    # sync — a different prompt degrades the fine-tuned output. See issue #6.
     "gemma": LLMConfig(
         id="gemma",
         label="Landtagstil",

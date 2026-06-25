@@ -1,29 +1,30 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: tops-frontend
+  name: tops2-frontend
   labels:
-    app: tops-frontend
+    app: tops2-frontend
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: tops-frontend
+      app: tops2-frontend
   template:
     metadata:
       labels:
-        app: tops-frontend
+        app: tops2-frontend
     spec:
       containers:
         - name: frontend
-          image: ghcr.io/aihpi/pilotproject-protokollierungsassistenz/frontend:sha-74353f6
+          image: ghcr.io/aihpi/pilotproject-protokollierungsassistenz/frontend:6-llm-config-switching
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
           env:
             - name: NGINX_RESOLVER
               value: "rke2-coredns-rke2-coredns.kube-system.svc.k8s.test.sci.hpi.de"
             - name: NGINX_BACKEND
-              value: "backend.tops.svc.cluster.local:8010"
+              value: "backend.tops2.svc.cluster.local:8010"
           readinessProbe:
             httpGet:
               path: /
