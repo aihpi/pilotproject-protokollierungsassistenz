@@ -16,8 +16,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: ghcr.io/aihpi/pilotproject-protokollierungsassistenz/frontend:6-llm-config-switching
-          imagePullPolicy: Always
+          image: ghcr.io/aihpi/pilotproject-protokollierungsassistenz/frontend:sha-74353f6
           ports:
             - containerPort: 80
           env:
