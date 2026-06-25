@@ -519,8 +519,11 @@ async def extract_tops_endpoint(
         logger.warning(f"Rejected non-PDF file: {pdf.content_type}")
         raise HTTPException(status_code=400, detail="Nur PDF-Dateien sind erlaubt")
 
-    # Resolve the selected configuration. The extraction prompt is not
-    # user-editable, so only the model is taken from the config.
+    # Resolve the selected configuration. /api/extract-tops always extracts with
+    # prompt_extraction.txt and deliberately ignores the config's summarisation
+    # prompt: the extraction prompt is curated and not user-editable, so only the
+    # model is taken from the config (resolved_prompt stays None for any selected
+    # config; a free-form call without a config_id may still pass its own prompt).
     try:
         cfg = get_config(config_id)
     except KeyError:

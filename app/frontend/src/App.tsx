@@ -93,12 +93,17 @@ export default function App() {
         setLlmConfigs(data.configs);
         setGenericPrompt(data.generic_prompt);
         setLlmSettings((prev) => {
-          const active = data.configs.find((c) => c.id === prev.configId);
-          const editable = data.configs.find((c) => c.id === data.default_id);
+          // Validate the stored configId: if it is unset or no longer offered
+          // by the backend, fall back to the backend default_id rather than
+          // sending an unknown id (the backend rejects unknown ids with KeyError).
+          const known = data.configs.some((c) => c.id === prev.configId);
+          const configId = known ? prev.configId : data.default_id;
+          const active = data.configs.find((c) => c.id === configId);
           return {
             ...prev,
-            model: prev.model || active?.model || "",
-            systemPrompt: prev.systemPrompt || editable?.system_prompt || "",
+            configId,
+            model: active?.model || prev.model || "",
+            systemPrompt: prev.systemPrompt || active?.system_prompt || "",
           };
         });
       })
