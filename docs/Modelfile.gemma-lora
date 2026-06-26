@@ -1,0 +1,11 @@
+# Template Modelfile for serving the gemma-4-12b LoRA adapter locally in Ollama.
+# UNTESTED — pending the 12b adapter. See docs/local-gemma-lora.md.
+#
+# Path 2 (runtime adapter over the quantised base). Convert the PEFT adapter to a
+# GGUF adapter first:
+#   python llama.cpp/convert_lora_to_gguf.py <adapter_dir> --base gemma4:12b \
+#     --outfile gemma-4-12b-protokoll-adapter.gguf
+# Then: ollama create gemma-4-12b-protokoll -f docs/Modelfile.gemma-lora
+
+FROM gemma4:12b
+ADAPTER ./gemma-4-12b-protokoll-adapter.gguf

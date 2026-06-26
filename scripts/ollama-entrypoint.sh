@@ -4,8 +4,15 @@
 
 set -e
 
-# Default model to pull (can be overridden via environment variable)
-MODEL="${OLLAMA_MODEL:-qwen3:8b}"
+# Models to pull on first start. OLLAMA_MODEL is the "standard" config model;
+# GEMMA_MODEL (optional) backs the "gemma" config. Deduplicated, blanks skipped.
+MODELS=()
+for m in "${OLLAMA_MODEL:-qwen3:8b}" "${GEMMA_MODEL:-}"; do
+    [ -z "$m" ] && continue
+    skip=
+    for seen in "${MODELS[@]}"; do [ "$seen" = "$m" ] && skip=1; done
+    [ -z "$skip" ] && MODELS+=("$m")
+done
 
 echo "Starting Ollama server..."
 # Start Ollama in the background
@@ -27,22 +34,24 @@ while ! ollama list > /dev/null 2>&1; do
 done
 echo "Ollama is ready!"
 
-# Check if model is already downloaded
-echo "Checking if model '$MODEL' is available..."
-if ollama list | grep -q "^$MODEL"; then
-    echo "Model '$MODEL' is already downloaded."
-else
-    echo "Model '$MODEL' not found. Downloading..."
-    echo "This may take several minutes depending on your internet connection."
-    echo ""
-    ollama pull "$MODEL"
-    echo ""
-    echo "Model '$MODEL' downloaded successfully!"
-fi
+# Pull each configured model that is not already present
+for MODEL in "${MODELS[@]}"; do
+    echo "Checking if model '$MODEL' is available..."
+    if ollama list | grep -q "^$MODEL"; then
+        echo "Model '$MODEL' is already downloaded."
+    else
+        echo "Model '$MODEL' not found. Downloading..."
+        echo "This may take several minutes depending on your internet connection."
+        echo ""
+        ollama pull "$MODEL"
+        echo ""
+        echo "Model '$MODEL' downloaded successfully!"
+    fi
+done
 
 echo ""
 echo "============================================"
-echo "Ollama is ready with model: $MODEL"
+echo "Ollama is ready with models: ${MODELS[*]}"
 echo "============================================"
 echo ""
 

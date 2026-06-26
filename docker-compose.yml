@@ -26,7 +26,9 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-http://ollama:11434/v1}
       - LLM_MODEL=${LLM_MODEL:-qwen3:8b}
       - LLM_API_KEY=${LLM_API_KEY:-ollama}
-      - GEMMA_MODEL=${GEMMA_MODEL:-gemma-4-31b}
+      # ponytail: base gemma4:12b stands in locally until the 12b LoRA adapter
+      # exists; flip to gemma-4-12b-protokoll once it is served (see docs/local-gemma-lora.md).
+      - GEMMA_MODEL=${GEMMA_MODEL:-gemma4:12b}
       - LLM_DEFAULT_CONFIG=${LLM_DEFAULT_CONFIG:-standard}
     volumes:
       - ./uploads:/app/uploads
@@ -49,6 +51,9 @@ services:
       - ./scripts/ollama-entrypoint.sh:/ollama-entrypoint.sh:ro
     environment:
       - OLLAMA_MODEL=${LLM_MODEL:-qwen3:8b}
+      # Pulled in addition to OLLAMA_MODEL so the "gemma" config works in docker.
+      # NOTE: gemma4:12b adds a ~7-8 GB pull and lengthens first boot.
+      - GEMMA_MODEL=${GEMMA_MODEL:-gemma4:12b}
     entrypoint: ["/bin/bash", "-c", "sed 's/\\r$//' /ollama-entrypoint.sh > /tmp/entrypoint.sh && /bin/bash /tmp/entrypoint.sh"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
