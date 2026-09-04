@@ -27,10 +27,10 @@ services:
       - LLM_MODEL=${LLM_MODEL:-qwen3:8b}
       - LLM_API_KEY=${LLM_API_KEY:-ollama}
       # The local Ollama service below only provisions one model (OLLAMA_MODEL).
-      # The fine-tuned Gemma adapter is only served in the tops2 cluster, so the
-      # "Landtagstil" preset defaults to the same locally-available model here to
-      # avoid failing on the first request. Set GEMMA_MODEL only if you have
-      # actually pulled that model into the local Ollama instance.
+      # The fine-tuned Gemma adapter is served by the LiteLLM hub in the cluster
+      # deployment, so the "Landtagstil" preset defaults to the same locally
+      # available model here to avoid failing on the first request. Set
+      # GEMMA_MODEL only if you have actually pulled that model into Ollama.
       - GEMMA_MODEL=${GEMMA_MODEL:-${LLM_MODEL:-qwen3:8b}}
       - LLM_DEFAULT_CONFIG=${LLM_DEFAULT_CONFIG:-standard}
     volumes:
