@@ -12,3 +12,4 @@ data:
   # LoRA adapter served by the LiteLLM hub for the "Landtagstil" configuration
   # (results/20260902-31b_cap48k in pilotproject-automatic-protocols, r8, cap 49152).
   GEMMA_MODEL: "gemma-4-31b-protokoll"
+  LLM_DEFAULT_CONFIG: "gemma"
