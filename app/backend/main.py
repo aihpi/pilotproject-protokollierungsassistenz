@@ -30,7 +30,6 @@ from transcribe import (
     transcribe_audio,
     load_models,
     TranscriptionModels,
-    TranscriptionResult,
     _cleanup_memory,
     WHISPER_MODEL,
     WHISPER_BATCH_SIZE,
@@ -38,6 +37,13 @@ from transcribe import (
 from summarize import summarize_segment
 from extract_tops import extract_tops_from_pdf
 from telemetry import TelemetryCollector
+from llm_config import (
+    get_config,
+    list_configs,
+    load_prompt,
+    DEFAULT_CONFIG_ID,
+    GENERIC_PROMPT_FILE,
+)
 
 # Configure logging with timestamps
 logging.basicConfig(
@@ -177,6 +183,8 @@ class TranscriptionJob(BaseModel):
 class SummarizeRequest(BaseModel):
     top_title: str
     lines: List[TranscriptLine]
+    top_index: Optional[int] = None  # 1-based TOP number, kept in the prompt for "## Zu TOP N:"
+    config_id: Optional[str] = None  # selected model configuration id
     model: Optional[str] = None  # LLM model to use (e.g., "qwen3:8b")
     system_prompt: Optional[str] = None  # Custom system prompt
 
@@ -190,6 +198,22 @@ class ExtractTOPsResponse(BaseModel):
     tops: List[str]
 
 
+class LLMConfigPublic(BaseModel):
+    """Browser-safe view of a model configuration (no endpoint, no api key)."""
+
+    id: str
+    label: str
+    model: str
+    prompt_editable: bool
+    system_prompt: str
+
+
+class LLMConfigsResponse(BaseModel):
+    configs: List[LLMConfigPublic]
+    default_id: str
+    generic_prompt: str  # prompt for the no-TOP "whole conversation" path
+
+
 class SessionCompleteRequest(BaseModel):
     """Request model for reporting session completion with telemetry."""
 
@@ -199,6 +223,7 @@ class SessionCompleteRequest(BaseModel):
     summarization_duration_seconds: float
     llm_model: str
     system_prompt: str
+    config_id: Optional[str] = None  # selected model configuration id
 
 
 class SessionCompleteResponse(BaseModel):
@@ -225,6 +250,31 @@ async def health_check():
             status_code=503, detail="Models not loaded yet - server starting up"
         )
     return {"status": "healthy", "models_loaded": True, "version": "0.1.0"}
+
+
+@app.get("/api/llm-configs", response_model=LLMConfigsResponse)
+async def get_llm_configs():
+    """
+    List the selectable model configurations.
+
+    Returns only browser-safe fields (no endpoint URL, no api key). The frontend
+    uses this to populate the configuration selector, to seed/lock the system
+    prompt editor, and to obtain the no-TOP "whole conversation" prompt.
+    """
+    return LLMConfigsResponse(
+        configs=[
+            LLMConfigPublic(
+                id=cfg.id,
+                label=cfg.label,
+                model=cfg.model,
+                prompt_editable=cfg.prompt_editable,
+                system_prompt=cfg.system_prompt,
+            )
+            for cfg in list_configs()
+        ],
+        default_id=DEFAULT_CONFIG_ID,
+        generic_prompt=load_prompt(GENERIC_PROMPT_FILE),
+    )
 
 
 @app.post("/api/transcribe", response_model=TranscriptionJob)
@@ -255,7 +305,7 @@ async def start_transcription(
     ):
         logger.warning(f"Rejected file with invalid type: {audio.content_type}")
         raise HTTPException(
-            status_code=400, detail=f"Ungültiger Dateityp. Erlaubt: MP3, WAV, M4A"
+            status_code=400, detail="Ungültiger Dateityp. Erlaubt: MP3, WAV, M4A"
         )
 
     # Generate job ID
@@ -405,15 +455,43 @@ async def generate_summary(request: SummarizeRequest):
     if not request.lines:
         raise HTTPException(status_code=400, detail="Keine Zeilen zum Zusammenfassen")
 
-    # Combine lines into text
-    text = "\n".join([f"{line.speaker}: {line.text}" for line in request.lines])
+    # Combine lines into "Name: utterance" text, merging consecutive turns from the
+    # same speaker into one space-joined line. This mirrors the transcription merge
+    # (transcribe.py) and the adapter's training input (pilotproject-automatic-protocols
+    # render_transcript_text), so the gemma config receives its trained prompt shape
+    # even after the frontend re-labels speakers (which can make adjacent lines share a
+    # speaker).
+    merged: list[list[str]] = []
+    for line in request.lines:
+        if merged and merged[-1][0] == line.speaker:
+            merged[-1][1] += " " + line.text
+        else:
+            merged.append([line.speaker, line.text])
+    text = "\n".join(f"{spk}: {txt}" if spk else txt for spk, txt in merged)
+
+    # Resolve the selected configuration -> model + system prompt.
+    try:
+        cfg = get_config(request.config_id)
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Unbekannte Modellkonfiguration")
+
+    # Backward compatibility: honour a raw model only when no config_id is given.
+    model = (
+        request.model if (request.config_id is None and request.model) else cfg.model
+    )
+    # Editable configs accept a custom prompt; locked ones are pinned server-side.
+    if cfg.prompt_editable:
+        system_prompt = request.system_prompt or cfg.system_prompt
+    else:
+        system_prompt = cfg.system_prompt
 
     try:
         result = summarize_segment(
             request.top_title,
             text,
-            model=request.model,
-            system_prompt=request.system_prompt,
+            model=model,
+            system_prompt=system_prompt,
+            top_index=request.top_index,
         )
         return SummarizeResponse(
             summary=result.summary,
@@ -428,6 +506,7 @@ async def generate_summary(request: SummarizeRequest):
 @app.post("/api/extract-tops", response_model=ExtractTOPsResponse)
 async def extract_tops_endpoint(
     pdf: UploadFile = File(...),
+    config_id: Optional[str] = Form(None),
     model: Optional[str] = Form(None),
     system_prompt: Optional[str] = Form(None),
 ):
@@ -441,6 +520,19 @@ async def extract_tops_endpoint(
     if pdf.content_type != "application/pdf" and not pdf.filename.endswith(".pdf"):
         logger.warning(f"Rejected non-PDF file: {pdf.content_type}")
         raise HTTPException(status_code=400, detail="Nur PDF-Dateien sind erlaubt")
+
+    # Resolve the selected configuration. /api/extract-tops always extracts with
+    # prompt_extraction.txt and deliberately ignores the config's summarisation
+    # prompt: the extraction prompt is curated and not user-editable, so only the
+    # model is taken from the config (resolved_prompt stays None for any selected
+    # config; a free-form call without a config_id may still pass its own prompt).
+    try:
+        cfg = get_config(config_id)
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Unbekannte Modellkonfiguration")
+
+    resolved_model = model if (config_id is None and model) else cfg.model
+    resolved_prompt = system_prompt if (config_id is None and system_prompt) else None
 
     # Save uploaded file temporarily
     file_id = str(uuid.uuid4())
@@ -456,8 +548,8 @@ async def extract_tops_endpoint(
         # Extract TOPs using LLM
         tops = extract_tops_from_pdf(
             str(file_path),
-            model=model,
-            system_prompt=system_prompt,
+            model=resolved_model,
+            system_prompt=resolved_prompt,
         )
 
         logger.info(f"Successfully extracted {len(tops)} TOPs from {pdf.filename}")
@@ -489,6 +581,19 @@ async def report_session_complete(request: SessionCompleteRequest):
     """
     logger.info(f"Received session complete report for job: {request.job_id}")
 
+    # When a configuration id is given, record its true model (and, for locked
+    # configs, its pinned prompt) rather than whatever the client reported.
+    llm_model = request.llm_model
+    system_prompt = request.system_prompt
+    if request.config_id:
+        try:
+            cfg = get_config(request.config_id)
+            llm_model = cfg.model
+            if not cfg.prompt_editable:
+                system_prompt = cfg.system_prompt
+        except KeyError:
+            pass
+
     # Get job data
     job = jobs.get(request.job_id)
     if not job:
@@ -496,8 +601,8 @@ async def report_session_complete(request: SessionCompleteRequest):
         # Still send telemetry with available data
         collector = TelemetryCollector()
         collector.set_summarization_metrics(
-            llm_model=request.llm_model,
-            system_prompt=request.system_prompt,
+            llm_model=llm_model,
+            system_prompt=system_prompt,
             top_count=request.top_count,
             summarization_duration_seconds=request.summarization_duration_seconds,
             protocol_char_count=request.protocol_char_count,
@@ -531,8 +636,8 @@ async def report_session_complete(request: SessionCompleteRequest):
 
     # Set summarization metrics from frontend
     collector.set_summarization_metrics(
-        llm_model=request.llm_model,
-        system_prompt=request.system_prompt,
+        llm_model=llm_model,
+        system_prompt=system_prompt,
         top_count=request.top_count,
         summarization_duration_seconds=request.summarization_duration_seconds,
         protocol_char_count=request.protocol_char_count,

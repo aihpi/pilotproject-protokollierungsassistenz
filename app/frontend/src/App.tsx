@@ -15,38 +15,15 @@ import {
   generateSummary,
   checkBackendHealth,
   reportSessionComplete,
+  getLLMConfigs,
 } from "./api";
-import type { TranscriptLine } from "./types";
+import type { TranscriptLine, LLMConfigPublic } from "./types";
 
 // LocalStorage key for LLM settings
 const LLM_SETTINGS_KEY = "llm-settings";
 
 // Implicit TOP title when no TOPs are defined
 const DEFAULT_TOP_TITLE = "Gesamtes Gespräch";
-
-// Generic system prompt for conversations without TOPs
-const GENERIC_SUMMARY_PROMPT = `Du bist ein Experte für die Zusammenfassung von Gesprächen und Audioaufnahmen.
-
-Deine Aufgabe ist es, aus einem Transkript eine klare und strukturierte Zusammenfassung zu erstellen.
-
-STIL:
-- Sachlich und gut lesbar
-- Dritte Person
-- Paraphrasieren statt wörtlich zitieren
-
-INHALT:
-- Wesentliche Themen und Diskussionspunkte
-- Wichtige Aussagen und Positionen der Teilnehmer
-- Getroffene Entscheidungen oder Vereinbarungen
-- Offene Punkte oder nächste Schritte
-
-FORMAT:
-- Kurze Gespräche (< 10 Äußerungen): 1-2 Absätze
-- Mittlere Gespräche (10-50 Äußerungen): 2-3 Absätze
-- Lange Gespräche (> 50 Äußerungen): 3-5 Absätze
-- Direkt mit Inhalt beginnen, keine Einleitung
-- NUR Fließtext, KEINE Markdown-Formatierung (keine **, keine #)
-`;
 
 export default function App() {
   // Current step in wizard
@@ -90,7 +67,8 @@ export default function App() {
     try {
       const saved = localStorage.getItem(LLM_SETTINGS_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        // Merge over defaults so older entries gain new fields (e.g. configId)
+        return { ...DEFAULT_LLM_SETTINGS, ...JSON.parse(saved) };
       }
     } catch (e) {
       console.error("Failed to load LLM settings from localStorage:", e);
@@ -98,9 +76,54 @@ export default function App() {
     return DEFAULT_LLM_SETTINGS;
   });
 
+  // Available model configurations, fetched from the backend
+  const [llmConfigs, setLlmConfigs] = useState<LLMConfigPublic[]>([]);
+  // System prompt used for the no-TOP "whole conversation" path
+  const [genericPrompt, setGenericPrompt] = useState<string>("");
+  // Whether the initial /api/llm-configs fetch has settled. Config-dependent
+  // requests (summary, telemetry) must wait for this so they don't go out with
+  // the empty seed values in DEFAULT_LLM_SETTINGS.
+  const [configsReady, setConfigsReady] = useState(false);
+
   // Check backend availability on mount
   useEffect(() => {
     checkBackendHealth().then(setBackendAvailable);
+  }, []);
+
+  // Load model configurations on mount and seed the prompt/model if unset
+  useEffect(() => {
+    getLLMConfigs()
+      .then((data) => {
+        setLlmConfigs(data.configs);
+        setGenericPrompt(data.generic_prompt);
+        setLlmSettings((prev) => {
+          // Validate the stored configId: if it is unset or no longer offered
+          // by the backend, fall back to the backend default_id rather than
+          // sending an unknown id (the backend rejects unknown ids with KeyError).
+          const known = data.configs.some((c) => c.id === prev.configId);
+          const configId = known ? prev.configId : data.default_id;
+          const active = data.configs.find((c) => c.id === configId);
+          // Only keep the stored prompt when the user explicitly edited it for a
+          // config that is still offered and still editable. Otherwise reseed from
+          // the config so backend prompt-file updates reach users and a removed
+          // preset's prompt is never sent under a different config.
+          const keepPrompt =
+            known && prev.promptModified && (active?.prompt_editable ?? false);
+          return {
+            ...prev,
+            configId,
+            model: active?.model || prev.model || "",
+            systemPrompt: keepPrompt
+              ? prev.systemPrompt
+              : active?.system_prompt ?? "",
+            promptModified: keepPrompt ? prev.promptModified : false,
+          };
+        });
+      })
+      .catch((e) => console.error("Failed to load LLM configs:", e))
+      // Mark hydration as settled either way: on failure the backend still
+      // resolves an empty config_id to its default, so the flow should proceed.
+      .finally(() => setConfigsReady(true));
   }, []);
 
   // Save LLM settings to localStorage when they change
@@ -187,8 +210,10 @@ export default function App() {
         DEFAULT_TOP_TITLE,
         applySpeakerNames(transcriptLines),
         {
+          configId: llmSettings.configId,
           model: llmSettings.model,
-          systemPrompt: GENERIC_SUMMARY_PROMPT,
+          systemPrompt: genericPrompt,
+          topIndex: 1,
         }
       );
       setSummaries({ 0: result.summary });
@@ -201,7 +226,8 @@ export default function App() {
           protocolCharCount: result.summary.length,
           summarizationDurationSeconds: result.durationSeconds,
           llmModel: llmSettings.model,
-          systemPrompt: GENERIC_SUMMARY_PROMPT,
+          systemPrompt: genericPrompt,
+          configId: llmSettings.configId,
         });
       }
     } catch (error) {
@@ -215,12 +241,19 @@ export default function App() {
 
   // Handle step navigation
   const handleStep1Next = () => {
-    if (backendAvailable) {
-      startTranscription();
-    } else {
+    if (!backendAvailable) {
       // Show error - backend not available
       alert("Backend nicht erreichbar.");
+      return;
     }
+    if (!configsReady) {
+      // Avoid starting a run before the config hydration has settled, which
+      // would let the no-TOP auto-summary and telemetry go out with empty
+      // config/model values.
+      alert("Modellkonfigurationen werden noch geladen. Bitte erneut versuchen.");
+      return;
+    }
+    startTranscription();
   };
 
   const handleStep2Next = async () => {
@@ -252,8 +285,10 @@ export default function App() {
             validTops[index]!,
             applySpeakerNames(topLines),
             {
+              configId: llmSettings.configId,
               model: llmSettings.model,
               systemPrompt: llmSettings.systemPrompt,
+              topIndex: index + 1,
             }
           );
           console.log(
@@ -293,6 +328,7 @@ export default function App() {
         summarizationDurationSeconds: totalDuration,
         llmModel: llmSettings.model,
         systemPrompt: llmSettings.systemPrompt,
+        configId: llmSettings.configId,
       });
       console.log(`[Summary] Telemetry sent`);
     }
@@ -327,17 +363,17 @@ export default function App() {
 
     const validTops = tops.filter((t) => t.trim() !== "");
     const topLines = transcript.filter((_, i) => assignments[i] === topIndex);
-    const prompt = skippedAssignment
-      ? GENERIC_SUMMARY_PROMPT
-      : llmSettings.systemPrompt;
+    const prompt = skippedAssignment ? genericPrompt : llmSettings.systemPrompt;
 
     try {
       const result = await generateSummary(
         validTops[topIndex]!,
         applySpeakerNames(topLines),
         {
+          configId: llmSettings.configId,
           model: llmSettings.model,
           systemPrompt: prompt,
+          topIndex: topIndex + 1,
         }
       );
       setSummaries((prev) => ({ ...prev, [topIndex]: result.summary }));
@@ -369,6 +405,7 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         settings={llmSettings}
         onSettingsChange={setLlmSettings}
+        configs={llmConfigs}
       />
 
       {/* Backend status indicator */}

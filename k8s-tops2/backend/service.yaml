@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels:
+    app: tops2-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: tops2-backend
+  ports:
+    - name: http
+      port: 8010
+      targetPort: 8010

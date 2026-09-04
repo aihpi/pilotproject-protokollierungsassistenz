@@ -40,8 +40,24 @@ export interface StepIndicatorProps {
 }
 
 export interface LLMSettings {
+  configId: string;
   model: string;
   systemPrompt: string;
+}
+
+// Browser-safe model configuration, as returned by GET /api/llm-configs.
+export interface LLMConfigPublic {
+  id: string;
+  label: string;
+  model: string;
+  prompt_editable: boolean;
+  system_prompt: string;
+}
+
+export interface LLMConfigsResponse {
+  configs: LLMConfigPublic[];
+  default_id: string;
+  generic_prompt: string;
 }
 
 export interface UploadStepProps {

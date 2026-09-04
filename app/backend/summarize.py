@@ -18,6 +18,9 @@ The server provides an OpenAI-compatible API at http://localhost:11434/v1
 import os
 import time
 from dataclasses import dataclass
+from typing import Optional
+
+from llm_config import load_prompt
 
 # LLM server configuration (Ollama)
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1")
@@ -25,45 +28,12 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3:8b")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "ollama")
 
 
-from typing import Optional
-
-
 @dataclass
 class SummarizationResult:
     """Result from summarization including timing."""
+
     summary: str
     duration_seconds: float
-
-
-# Default system prompt for meeting summarization
-DEFAULT_SYSTEM_PROMPT = """Du bist ein Experte für die Erstellung von Sitzungsprotokollen für deutsche Kommunalverwaltungen.
-
-Deine Aufgabe ist es, aus einem Transkript eines Tagesordnungspunktes (TOP) eine Zusammenfassung im Stil einer offiziellen Niederschrift zu erstellen.
-
-STIL:
-- Formale Verwaltungssprache, dritte Person
-- Beispiel: "Die Vorsitzende erläuterte den Sachverhalt.", "Herr Müller wies auf die Kostenfrage hin."
-- Paraphrasieren statt wörtlich zitieren
-
-INHALT:
-- Wesentliche Diskussionspunkte und Argumente
-- Getroffene Beschlüsse mit Abstimmungsergebnis (z.B. "einstimmig beschlossen", "mit 5:2 Stimmen angenommen")
-- Wichtige Positionen der Teilnehmer
-- Vereinbarte Maßnahmen oder nächste Schritte
-
-IGNORIEREN:
-- Verfahrensdetails (Mikrofon, Redezeit, Begrüßungen)
-- Füllwörter, Versprecher, triviale Zwischenbemerkungen
-- Technische Störungen
-
-FORMAT:
-- Kurze TOPs (< 10 Äußerungen): 1-2 Absätze
-- Mittlere TOPs (10-50 Äußerungen): 2-3 Absätze
-- Lange TOPs (> 50 Äußerungen): 3-5 Absätze
-- Chronologischer Ablauf
-- Direkt mit Inhalt beginnen, keine Einleitung
-- NUR Fließtext, KEINE Markdown-Formatierung (keine **, keine #)
-"""
 
 
 def summarize_segment(
@@ -71,6 +41,7 @@ def summarize_segment(
     transcript_text: str,
     model: Optional[str] = None,
     system_prompt: Optional[str] = None,
+    top_index: Optional[int] = None,
 ) -> SummarizationResult:
     """
     Generate a summary for a meeting segment (TOP) using Ollama.
@@ -79,7 +50,11 @@ def summarize_segment(
         top_title: Title of the agenda item (TOP)
         transcript_text: Full transcript text for this TOP
         model: LLM model to use (default: from env or qwen3:8b)
-        system_prompt: Custom system prompt (default: DEFAULT_SYSTEM_PROMPT)
+        system_prompt: Custom system prompt (default: prompt_llama.txt)
+        top_index: 1-based number of this TOP. Some prompts (e.g. prompt_gemma.txt)
+            format their heading as "## Zu TOP N:" and read N from the "TOP:" field,
+            so the number must be carried into the prompt; numbering is stripped
+            during extraction and can no longer be recovered from the title alone.
 
     Returns:
         SummarizationResult with summary text and duration in seconds
@@ -102,11 +77,15 @@ def summarize_segment(
 
     # Use provided values or fall back to defaults
     actual_model = model or LLM_MODEL
-    actual_system_prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
+    actual_system_prompt = system_prompt or load_prompt("prompt_llama.txt")
+
+    # Keep the TOP number in the prompt so prompts that build a "## Zu TOP N:"
+    # heading can recover N (extraction strips numbering from the title).
+    top_label = f"TOP {top_index}: {top_title}" if top_index is not None else f"TOP: {top_title}"
 
     user_prompt = f"""Erstelle eine Zusammenfassung für folgenden Tagesordnungspunkt:
 
-TOP: {top_title}
+{top_label}
 
 Transkript:
 {transcript_text}

@@ -2,7 +2,11 @@
  * API client for the Protokollierungsassistenz backend
  */
 
-import type { TranscriptLine, TranscriptionJob } from "./types";
+import type {
+  TranscriptLine,
+  TranscriptionJob,
+  LLMConfigsResponse,
+} from "./types";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -76,8 +80,12 @@ export async function pollTranscription(
  * Options for summary generation.
  */
 export interface SummarizeOptions {
+  configId?: string;
   model?: string;
   systemPrompt?: string;
+  // 1-based TOP number. Carried into the prompt so configs whose prompt builds a
+  // "## Zu TOP N:" heading (e.g. the Gemma preset) can recover N.
+  topIndex?: number;
 }
 
 /**
@@ -104,6 +112,8 @@ export async function generateSummary(
     body: JSON.stringify({
       top_title: topTitle,
       lines: lines,
+      top_index: options?.topIndex,
+      config_id: options?.configId,
       model: options?.model,
       system_prompt: options?.systemPrompt,
     }),
@@ -125,6 +135,7 @@ export async function generateSummary(
  * Options for TOP extraction from PDF.
  */
 export interface ExtractTOPsOptions {
+  configId?: string;
   model?: string;
   systemPrompt?: string;
 }
@@ -140,6 +151,9 @@ export async function extractTOPsFromPDF(
   formData.append("pdf", pdfFile);
 
   // Add optional parameters as form fields
+  if (options?.configId) {
+    formData.append("config_id", options.configId);
+  }
   if (options?.model) {
     formData.append("model", options.model);
   }
@@ -175,6 +189,19 @@ export async function checkBackendHealth(): Promise<boolean> {
 }
 
 /**
+ * Fetch the selectable model configurations from the backend.
+ */
+export async function getLLMConfigs(): Promise<LLMConfigsResponse> {
+  const response = await fetch(`${API_BASE}/api/llm-configs`);
+
+  if (!response.ok) {
+    throw new Error("Fehler beim Laden der Modellkonfigurationen");
+  }
+
+  return response.json();
+}
+
+/**
  * Session complete telemetry data.
  */
 export interface SessionCompleteData {
@@ -184,6 +211,7 @@ export interface SessionCompleteData {
   summarizationDurationSeconds: number;
   llmModel: string;
   systemPrompt: string;
+  configId?: string;
 }
 
 /**
@@ -206,6 +234,7 @@ export async function reportSessionComplete(
         summarization_duration_seconds: data.summarizationDurationSeconds,
         llm_model: data.llmModel,
         system_prompt: data.systemPrompt,
+        config_id: data.configId,
       }),
     });
 

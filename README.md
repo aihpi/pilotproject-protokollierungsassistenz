@@ -372,15 +372,26 @@ docker build -f Dockerfile.gpu --build-arg HF_TOKEN=$HF_TOKEN -t backend:gpu ./a
 | `WHISPER_DEVICE`     | Device for inference (`cuda`, `cpu`, `auto`)        | `auto`                      |
 | `WHISPER_BATCH_SIZE` | Batch size for transcription                        | `16`                        |
 | `WHISPER_LANGUAGE`   | Language code                                       | `de`                        |
-| `LLM_BASE_URL`       | Ollama API endpoint                                 | `http://localhost:11434/v1` |
-| `LLM_MODEL`          | Model name for summarization                        | `qwen3:8b`                  |
+| `LLM_BASE_URL`       | LLM server endpoint (OpenAI-compatible)             | `http://localhost:11434/v1` |
+| `LLM_MODEL`          | Model for the "Standard" configuration              | `qwen3:8b`                  |
+| `GEMMA_MODEL`        | Model for the alternative "Gemma" configuration     | `gemma-4-31b`               |
+| `LLM_DEFAULT_CONFIG` | Default configuration (`standard` or `gemma`)       | `standard`                  |
+| `LLM_API_KEY`        | LLM server key (per-user, server-side only)         | `ollama`                    |
 | `TELEMETRY_WEBHOOK_URL` | Google Apps Script webhook URL for telemetry     | (empty, disabled)           |
+
+The frontend offers two selectable model configurations. **Standard** uses
+`LLM_MODEL` with a user-editable system prompt. **Gemma** uses `GEMMA_MODEL` with a
+fixed prompt (`app/backend/prompt_gemma.txt`) and is the stand-in for an eventual
+fine-tuned adapter. Both configurations use the same `LLM_BASE_URL` / `LLM_API_KEY`;
+only the model and prompt differ. The api key is held server-side and is never sent
+to the browser. System prompts live in `app/backend/prompt_*.txt`.
 
 ### API Endpoints
 
 | Endpoint                         | Method | Description                          |
 | -------------------------------- | ------ | ------------------------------------ |
 | `/health`                        | GET    | Health check                         |
+| `/api/llm-configs`               | GET    | List selectable model configurations |
 | `/api/transcribe`                | POST   | Upload audio and start transcription |
 | `/api/transcribe/{job_id}`       | GET    | Get transcription job status         |
 | `/api/audio/{job_id}`            | GET    | Stream audio file                    |
