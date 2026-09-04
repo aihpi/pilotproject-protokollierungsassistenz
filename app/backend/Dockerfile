@@ -44,7 +44,7 @@ RUN python -c "from transcribe import load_models; load_models()"
 # Prompt text files are runtime-only assets. Copy them after the expensive
 # dependency install and model prefetch so a prompt edit doesn't invalidate
 # those cached layers on rebuild.
-COPY *.txt ./
+COPY *.txt *.md ./
 
 # Clear the HF_TOKEN from environment (security: don't leak token in final image)
 ENV HF_TOKEN=

@@ -52,6 +52,8 @@ export interface LLMConfigPublic {
   model: string;
   prompt_editable: boolean;
   system_prompt: string;
+  // Markdown usage notes for this configuration, null when it has none.
+  usage_notes: string | null;
 }
 
 export interface LLMConfigsResponse {
