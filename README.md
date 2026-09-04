@@ -374,17 +374,31 @@ docker build -f Dockerfile.gpu --build-arg HF_TOKEN=$HF_TOKEN -t backend:gpu ./a
 | `WHISPER_LANGUAGE`   | Language code                                       | `de`                        |
 | `LLM_BASE_URL`       | LLM server endpoint (OpenAI-compatible)             | `http://localhost:11434/v1` |
 | `LLM_MODEL`          | Model for the "Standard" configuration              | `qwen3:8b`                  |
-| `GEMMA_MODEL`        | Model for the alternative "Gemma" configuration     | `gemma-4-31b`               |
+| `GEMMA_MODEL`        | Model for the "Landtagstil" configuration (the LoRA adapter) | `gemma-4-31b`      |
 | `LLM_DEFAULT_CONFIG` | Default configuration (`standard` or `gemma`)       | `standard`                  |
 | `LLM_API_KEY`        | LLM server key (per-user, server-side only)         | `ollama`                    |
 | `TELEMETRY_WEBHOOK_URL` | Google Apps Script webhook URL for telemetry     | (empty, disabled)           |
 
 The frontend offers two selectable model configurations. **Standard** uses
-`LLM_MODEL` with a user-editable system prompt. **Gemma** uses `GEMMA_MODEL` with a
-fixed prompt (`app/backend/prompt_gemma.txt`) and is the stand-in for an eventual
-fine-tuned adapter. Both configurations use the same `LLM_BASE_URL` / `LLM_API_KEY`;
-only the model and prompt differ. The api key is held server-side and is never sent
-to the browser. System prompts live in `app/backend/prompt_*.txt`.
+`LLM_MODEL` with a user-editable system prompt. **Landtagstil** uses `GEMMA_MODEL`
+with the fixed prompt the adapter was trained on (`app/backend/prompt_gemma.txt`).
+Both configurations use the same `LLM_BASE_URL` / `LLM_API_KEY`; only the model and
+prompt differ. The api key is held server-side and is never sent to the browser.
+System prompts live in `app/backend/prompt_*.txt`.
+
+### Deployment at HPI
+
+The instance at `tops.aisc.hpi.de` runs in the Kubernetes namespace `tops`; ArgoCD
+syncs the manifests under `k8s/` from `main`, and the CI deploy job rewrites the
+image tags there on every push to `main`. Its backend ConfigMap
+(`k8s/backend/configmap.yaml`) points `GEMMA_MODEL` at `gemma-4-31b-protokoll`, the
+LoRA adapter served by the LiteLLM hub at `api.aisc.hpi.de`. Since 2026-09-04 that
+adapter is the cap48k run of
+[pilotproject-automatic-protocols](https://github.com/aihpi/pilotproject-automatic-protocols)
+(`results/20260902-31b_cap48k`: gemma-4-31B-it, QLoRA r8, sequence cap 49,152,
+validation loss 0.6927). A ConfigMap change does not restart the pod; after the
+ArgoCD sync run `kubectl rollout restart deployment/tops-backend -n tops`. Replacing
+the adapter on the hub is described in `docs/deploy-lora-adapter.md`.
 
 ### API Endpoints
 
