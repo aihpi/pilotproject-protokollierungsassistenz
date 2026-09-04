@@ -206,6 +206,8 @@ class LLMConfigPublic(BaseModel):
     model: str
     prompt_editable: bool
     system_prompt: str
+    # Markdown usage notes for this configuration, None when it has none.
+    usage_notes: Optional[str] = None
 
 
 class LLMConfigsResponse(BaseModel):
@@ -269,6 +271,7 @@ async def get_llm_configs():
                 model=cfg.model,
                 prompt_editable=cfg.prompt_editable,
                 system_prompt=cfg.system_prompt,
+                usage_notes=cfg.usage_notes,
             )
             for cfg in list_configs()
         ],

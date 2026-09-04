@@ -28,7 +28,7 @@ GENERIC_PROMPT_FILE = "prompt_generic.txt"
 
 @lru_cache(maxsize=None)
 def load_prompt(name: str) -> str:
-    """Read a prompt .txt file from the backend directory (cached per process)."""
+    """Read a prompt or notes file from the backend directory (cached per process)."""
     return (_PROMPT_DIR / name).read_text(encoding="utf-8").strip()
 
 
@@ -41,10 +41,16 @@ class LLMConfig:
     model: str
     prompt_file: str
     prompt_editable: bool
+    # Optional markdown shown to the user as "Hinweise zur Nutzung" for this config.
+    notes_file: Optional[str] = None
 
     @property
     def system_prompt(self) -> str:
         return load_prompt(self.prompt_file)
+
+    @property
+    def usage_notes(self) -> Optional[str]:
+        return load_prompt(self.notes_file) if self.notes_file else None
 
 
 _CONFIGS: dict[str, LLMConfig] = {
@@ -65,6 +71,7 @@ _CONFIGS: dict[str, LLMConfig] = {
         model=GEMMA_MODEL,
         prompt_file="prompt_gemma.txt",
         prompt_editable=False,
+        notes_file="notes_gemma.md",
     ),
 }
 

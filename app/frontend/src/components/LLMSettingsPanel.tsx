@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LLMConfigPublic } from '../types';
+import UsageNotesDialog from './UsageNotesDialog';
 
 export interface LLMSettings {
   configId: string;
@@ -37,36 +38,49 @@ export default function LLMSettingsPanel({
   configs,
 }: LLMSettingsPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // "Hinweise zur Nutzung" dialog for the selected configuration.
+  const [notesOpen, setNotesOpen] = useState(false);
+  const closeNotes = useCallback(() => setNotesOpen(false), []);
 
-  // Close on escape key
+  // Close on escape key (not while the notes dialog is open: it handles escape itself)
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !notesOpen) onClose();
     };
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
       return () => document.removeEventListener('keydown', handleEscape);
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, notesOpen]);
 
-  // Close on click outside
+  // Close on click outside (clicks on the notes dialog and its backdrop do not count)
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
+      if (notesOpen) return;
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
         onClose();
       }
     };
     if (isOpen) {
       // Delay to prevent immediate close on the same click that opened it
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         document.addEventListener('mousedown', handleClickOutside);
       }, 0);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      return () => {
+        clearTimeout(timer);
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, notesOpen]);
+
+  // The dialog does not outlive the drawer.
+  useEffect(() => {
+    if (!isOpen) setNotesOpen(false);
+  }, [isOpen]);
 
   const selectedConfig = configs.find((c) => c.id === settings.configId);
   const promptEditable = selectedConfig?.prompt_editable ?? true;
+  const usageNotes = selectedConfig?.usage_notes ?? null;
   // Editable configs show the user's (possibly customised) prompt; locked
   // configs show their fixed prompt read-only.
   const displayedPrompt = promptEditable
@@ -75,6 +89,7 @@ export default function LLMSettingsPanel({
 
   const handleConfigChange = (configId: string) => {
     const cfg = configs.find((c) => c.id === configId);
+    setNotesOpen(false);
     onSettingsChange({
       ...settings,
       configId,
@@ -148,6 +163,22 @@ export default function LLMSettingsPanel({
             </select>
           </div>
 
+          {/* Usage notes (only for configurations that ship them) */}
+          {usageNotes && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setNotesOpen(true)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
+              >
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Hinweise zur Nutzung
+              </button>
+            </div>
+          )}
+
           {/* System Prompt */}
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -202,6 +233,15 @@ export default function LLMSettingsPanel({
           </p>
         </div>
       </div>
+
+      {/* Rendered as a sibling of the panel: the panel's inline transform would
+          clamp a position:fixed child to the drawer's width. */}
+      <UsageNotesDialog
+        isOpen={notesOpen}
+        title={`Hinweise zur Nutzung: ${selectedConfig?.label ?? ''}`}
+        markdown={usageNotes ?? ''}
+        onClose={closeNotes}
+      />
     </>
   );
 }
