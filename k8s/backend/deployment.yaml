@@ -19,7 +19,7 @@ spec:
         accelerator: a30
       containers:
         - name: backend
-          image: ghcr.io/aihpi/pilotproject-protokollierungsassistenz/backend:sha-8e80b7c-gpu
+          image: ghcr.io/aihpi/pilotproject-protokollierungsassistenz/backend:sha-53d9a6f-gpu
           ports:
             - containerPort: 8010
           envFrom:
